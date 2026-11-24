@@ -8,12 +8,6 @@ local Visuals = {
 		IconShape = "Square",
 		Border = true,
 		ShowTabTitle = true,
-		CustomEmptyPage = {
-			Icon = "lucide:scan-eye",
-			IconSize = 44,
-			Title = "Visuals",
-			Desc = "Visual tools are coming soon.",
-		},
 	},
 
 	features = {},

@@ -16,7 +16,7 @@ Shared.services = {
 }
 
 Shared.settings = {
-	version = "2.0.0",
+	version = "2.1.0",
 
 	-- Main.lua overwrites this with the URL it loaded from.
 	baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/",
@@ -57,8 +57,9 @@ Shared.settings = {
 		},
 	},
 
-	-- Each feature builds its own tab, in this order.
-	featureOrder = { "Movement", "Player", "Combat", "Teleport", "Visuals", "Misc" },
+	-- Each feature builds its own tab, in this order. Empty placeholder tabs
+	-- stay out of the menu until they have real controls.
+	featureOrder = { "Movement", "Combat" },
 }
 
 return Shared

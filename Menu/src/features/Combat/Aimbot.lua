@@ -415,7 +415,7 @@ function Aimbot.build(tab, menu, modules)
 	})
 
 	predictionSlider = aimSection:Slider({
-		Title = "Prediction",
+		Title = "Prediction Time",
 		Desc = "Seconds of target movement to lead",
 		Step = 0.01,
 		Value = {
@@ -444,12 +444,6 @@ function Aimbot.build(tab, menu, modules)
 			showFov = state
 			updateCircle()
 		end,
-	})
-
-	tab:Paragraph({
-		Title = "Aimbot",
-		Desc = "Hold or toggle the aim key to move the camera. The game crosshair is 58 pixels above the camera center, so the FOV circle is centered on the crosshair.",
-		Image = "lucide:crosshair",
 	})
 
 	menu:addConnection(userInputService.InputBegan:Connect(function(input, gameProcessed)

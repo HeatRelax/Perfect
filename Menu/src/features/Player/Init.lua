@@ -8,12 +8,6 @@ local Player = {
 		IconShape = "Square",
 		Border = true,
 		ShowTabTitle = true,
-		CustomEmptyPage = {
-			Icon = "lucide:user-round",
-			IconSize = 44,
-			Title = "Player",
-			Desc = "Player tools are on the way.",
-		},
 	},
 
 	features = {},

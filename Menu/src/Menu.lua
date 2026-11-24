@@ -7,42 +7,12 @@ Tab.__index = Tab
 local Section = {}
 Section.__index = Section
 
-local WRAP_WIDTH = 52
-
 local function log(message)
 	if type(warn) == "function" then
 		warn("[Mad City] " .. tostring(message))
 	else
 		print("[Mad City] " .. tostring(message))
 	end
-end
-
-local function wrapText(text, limit)
-	text = tostring(text or "")
-	local lines = {}
-
-	for paragraph in string.gmatch(text .. "\n", "(.-)\n") do
-		if paragraph == "" then
-			table.insert(lines, "")
-		else
-			local line = ""
-			for word in string.gmatch(paragraph, "%S+") do
-				if line == "" then
-					line = word
-				elseif #line + 1 + #word <= limit then
-					line = line .. " " .. word
-				else
-					table.insert(lines, line)
-					line = word
-				end
-			end
-			if line ~= "" then
-				table.insert(lines, line)
-			end
-		end
-	end
-
-	return table.concat(lines, "\n")
 end
 
 local function toKeyCode(value)
@@ -72,6 +42,7 @@ function Menu.new(shared, library)
 	self.library = library
 	self.windui = library -- compatibility alias for older feature code
 	self.window = nil
+	self.settingsTab = nil
 	self.tabs = {}
 	self.cleanups = {}
 	self.connections = {}
@@ -133,24 +104,6 @@ function Menu:createSection(tab, data)
 	tab.lastSection = section
 	table.insert(tab.sections, section)
 
-	if data.Desc ~= nil and tostring(data.Desc) ~= "" then
-		tokyo:AddText({
-			text = wrapText(data.Desc, WRAP_WIDTH),
-		})
-	end
-
-	return section
-end
-
-function Menu:createEmptyPage(tab, page)
-	local section = self:createSection(tab, {
-		Title = tostring(page.Title or tab.config.Title or "Info"),
-	})
-
-	section.tokyo:AddText({
-		text = wrapText(page.Desc or "", WRAP_WIDTH),
-	})
-
 	return section
 end
 
@@ -176,8 +129,35 @@ function Menu:addTab(config)
 
 	table.insert(self.tabs, tab)
 
-	if config.CustomEmptyPage then
-		self:createEmptyPage(tab, config.CustomEmptyPage)
+	return tab
+end
+
+function Menu:createSettingsTab()
+	if self.settingsTab then
+		return self.settingsTab
+	end
+	if not self.window or type(self.library.CreateSettingsTab) ~= "function" then
+		return nil
+	end
+
+	local ok, tab = pcall(self.library.CreateSettingsTab, self.library, self.window)
+	if not ok then
+		log("Settings tab failed: " .. tostring(tab))
+		return nil
+	end
+
+	self.settingsTab = tab
+
+	-- Tokyo's Unload button only tears down the library. Route it through the
+	-- menu so feature cleanups and the global handle are released too.
+	for _, section in ipairs(tab.sections or {}) do
+		for _, option in ipairs(section.options or {}) do
+			if option.class == "button" and tostring(option.text) == "Unload" then
+				option.callback = function()
+					self:unload()
+				end
+			end
+		end
 	end
 
 	return tab
@@ -305,7 +285,20 @@ function Menu:unload()
 		end
 	end
 
+	-- A direct menu:unload() (such as the Settings button) still needs to drop
+	-- the global handle so a reload starts clean.
+	if type(getgenv) == "function" then
+		local okEnv, env = pcall(getgenv)
+		if okEnv and type(env) == "table" then
+			local handle = env.MadCityMenu
+			if type(handle) == "table" and handle.Menu == self then
+				env.MadCityMenu = nil
+			end
+		end
+	end
+
 	self.window = nil
+	self.settingsTab = nil
 	self.tabs = {}
 end
 
@@ -315,16 +308,6 @@ end
 
 function Tab:Section(data)
 	return self.menu:createSection(self, data)
-end
-
-function Tab:Paragraph(data)
-	local section = self.lastSection
-	if not section then
-		section = self.menu:createSection(self, {
-			Title = "Info",
-		})
-	end
-	return section:Paragraph(data)
 end
 
 function Tab:Select()
@@ -447,45 +430,6 @@ function Section:Button(data)
 	return self.menu:wrapOption(self, option, "button")
 end
 
-function Section:Paragraph(data)
-	data = data or {}
-
-	local title = tostring(data.Title or "Info")
-	local desc = tostring(data.Desc or "")
-
-	local titleOption = self.tokyo:AddText({
-		text = "> " .. title,
-	})
-	if titleOption and titleOption.objects and titleOption.objects.text then
-		titleOption.objects.text.ThemeColor = "Accent"
-	end
-
-	local descOption = self.tokyo:AddText({
-		text = wrapText(desc, WRAP_WIDTH),
-	})
-
-	local proxy = {
-		_title = title,
-		_desc = desc,
-	}
-
-	function proxy:SetTitle(value)
-		self._title = tostring(value or "")
-		titleOption:SetText("> " .. self._title)
-	end
-
-	function proxy:SetDesc(value)
-		self._desc = tostring(value or "")
-		descOption:SetText(wrapText(self._desc, WRAP_WIDTH))
-	end
-
-	function proxy:SetText(value)
-		self:SetDesc(value)
-	end
-
-	return proxy
-end
-
 function Section:Separator(data)
 	data = data or {}
 	return self.tokyo:AddSeparator({
@@ -494,8 +438,9 @@ function Section:Separator(data)
 end
 
 function Section:Space()
-	-- Tokyo sections are already compact; spacing would only add dead rows.
-	return nil
+	return self.tokyo:AddSeparator({
+		text = "",
+	})
 end
 
 return Menu

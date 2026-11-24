@@ -8,12 +8,6 @@ local Teleport = {
 		IconShape = "Square",
 		Border = true,
 		ShowTabTitle = true,
-		CustomEmptyPage = {
-			Icon = "lucide:map-pinned",
-			IconSize = 44,
-			Title = "Teleport",
-			Desc = "Fast travel options are coming soon.",
-		},
 	},
 
 	features = {},

@@ -19,27 +19,29 @@ src/
     Movement/
       Init.lua            tab definition + feature list
       Flight.lua          fly toggle, keybind, speed slider
-    Player/
-      Init.lua
     Combat/
       Init.lua            tab definition + shared module list
       Common.lua          targeting, team checks, wall checks, FOV circle
       Aimbot.lua          smooth camera aimbot
       SilentAim.lua       WeaponCore shot hooks
+    Player/
+      Init.lua            scaffold, not loaded yet
     Teleport/
-      Init.lua
+      Init.lua            scaffold, not loaded yet
     Visuals/
-      Init.lua
+      Init.lua            scaffold, not loaded yet
     Misc/
-      Init.lua
+      Init.lua            scaffold, not loaded yet
 Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
 
-The menu opens Movement, Player, Combat, Teleport, Visuals, and Misc tabs.
-Each feature file adds its own controls to its tab. Tokyo UI lays tabs out as a
-flat row and splits every tab into two columns; the adapter alternates sections
-across those columns and appends paragraphs to the section that created them.
+The menu opens Movement and Combat, plus Tokyo's Settings tab. Each feature
+file adds its own controls to its tab. Tokyo UI lays tabs out as a flat row and
+splits every tab into two columns; the adapter alternates sections across those
+columns. Controls are grouped with divider lines instead of paragraph text.
+The empty Player, Teleport, Visuals, and Misc scaffolds stay out of
+`featureOrder` until they have real controls.
 
 ## Interface
 
@@ -47,6 +49,9 @@ across those columns and appends paragraphs to the section that created them.
 - Two-column Tokyo sections with toggles, sliders, dropdowns, keybinds, and buttons.
 - Press `RightShift` to show or hide the menu.
 - A short notification confirms the version when the menu loads.
+- The Settings tab holds config load/save, the theme preset list, watermark and
+  indicator controls, rejoin buttons, and Unload. Watermark and keybind
+  indicators start hidden.
 
 ## Flight
 
@@ -71,7 +76,7 @@ Moves the camera onto the nearest target inside the FOV circle.
 - **Smoothness**, **FOV**, and **Max Distance** sliders.
 - **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
 - **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
-- The prediction slider stays locked until **Prediction** is enabled.
+- The **Prediction Time** slider stays locked until **Prediction** is enabled.
 - The FOV circle is centered on the game crosshair, which sits 58 pixels above
   the camera projection center.
 
@@ -81,8 +86,8 @@ Re-aims shots without moving the camera or your input.
 
 - **Enabled** toggle, **FOV** and **Max Distance** sliders.
 - **Target Part**, **Team Check**, **Wall Check**, **Max Damage**, **Show FOV**.
-- **Reinstall Hooks** re-hooks WeaponCore after a respawn or script reset.
-- **Hook Status** shows how many of the four shot functions are hooked.
+- **Reinstall Hooks** re-hooks WeaponCore after a respawn or script reset and
+  reports the result in a notification.
 - Hooks `WeaponCore.ShootGun`, `ShootShotgun`, `ShootTazer`, and `ShootRayGun`,
   replacing the aim point and spread, and setting damage to `1e9` when
   **Max Damage** is on. If WeaponCore hooks cannot be installed, the remote
@@ -99,7 +104,8 @@ getgenv().MadCityMenu.Unload()
 
 Unloading runs feature cleanups, disconnects input connections, removes FOV
 circles, restores WeaponCore hooks, and calls Tokyo UI's `Unload()`, which
-removes every Drawing object and destroys the `MadCityTokyo` ScreenGui.
+removes every Drawing object and destroys the `MadCityTokyo` ScreenGui. The
+Settings tab's **Unload** button uses this same path.
 
 ## Hosting
 
@@ -164,10 +170,6 @@ local Example = {
         Title = "Example",
         Desc = "What this tab does",
         Icon = "lucide:wrench",
-        CustomEmptyPage = {
-            Title = "Example",
-            Desc = "Coming soon.",
-        },
     },
 
     features = {},
@@ -188,8 +190,10 @@ metadata for future UIs; Tokyo UI renders text-only tabs.
 
 Edit the Tokyo palette in `src/Theme.lua`. Every key Tokyo UI reads is listed
 there: `Accent`, `Background`, `Primary Text`, `Option Background`,
-`Section Background`, and the rest of the palette. Window size, title, and the
-toggle key live in `src/Shared.lua`.
+`Section Background`, and the rest of the palette. The palette is registered as
+the **Mad City** preset in the Settings tab, so users can switch to another
+preset and back. Window size, title, and the toggle key live in
+`src/Shared.lua`.
 
 ## Tokyo UI loading
 
@@ -203,5 +207,8 @@ patches three things before running it:
 
 After `library:init()`, the theme is applied with `library:SetTheme(...)`, the
 toggle key is set to `RightShift`, and the empty Tokyo keybind indicator is
-hidden. Tokyo UI requires an executor with `Drawing`, `makefolder`, `isfile`,
-`readfile`, and `writefile`.
+hidden. `Menu:createSettingsTab()` then calls Tokyo's
+`library:CreateSettingsTab(window)`, restores the Mad City palette (Tokyo
+selects its Default preset while building), and routes the settings Unload
+button through the menu cleanup. Tokyo UI requires an executor with `Drawing`,
+`makefolder`, `listfiles`, `isfile`, `readfile`, and `writefile`.

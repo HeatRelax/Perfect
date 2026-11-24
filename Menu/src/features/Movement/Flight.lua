@@ -773,12 +773,6 @@ function Flight.build(tab, menu)
 		end,
 	})
 
-	tab:Paragraph({
-		Title = "Flight Controls",
-		Desc = "WASD to move, Space to rise, LeftControl to descend. Fly arms through a nearby vehicle seat.",
-		Image = "lucide:keyboard",
-	})
-
 	local function bindCharacter(character)
 		if deathConnection then
 			deathConnection:Disconnect()

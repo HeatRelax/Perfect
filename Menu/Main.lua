@@ -129,6 +129,31 @@ for _, tabData in ipairs(tabs) do
 	end
 end
 
+-- Tokyo's settings tab selects the Default preset while it builds, so apply
+-- the Mad City palette again and show it as the active preset.
+local SettingsTab = menu:createSettingsTab()
+Theme.apply(library)
+
+if SettingsTab then
+	local preset = library.options and library.options.preset_theme
+	if preset and type(preset.Select) == "function" then
+		pcall(preset.Select, preset, Theme.Name, true)
+	end
+
+	local keybindToggle = library.options and library.options.keybind_indicator
+	if keybindToggle and type(keybindToggle.SetState) == "function" then
+		pcall(keybindToggle.SetState, keybindToggle, false, true)
+	end
+
+	local watermarkToggle = library.options and library.options.watermark_enabled
+	if watermarkToggle and type(watermarkToggle.SetState) == "function" then
+		pcall(watermarkToggle.SetState, watermarkToggle, false, true)
+		if library.watermark and type(library.watermark.Update) == "function" then
+			pcall(library.watermark.Update, library.watermark)
+		end
+	end
+end
+
 if firstTab and type(firstTab.Select) == "function" then
 	pcall(function()
 		firstTab:Select()

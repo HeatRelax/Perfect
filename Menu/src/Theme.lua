@@ -43,6 +43,24 @@ Theme.tokyo = {
 	["Risky Text Enabled"] = rgb(252, 165, 165),
 }
 
+local function registerPreset(library)
+	if type(library.themes) ~= "table" then
+		return
+	end
+
+	for _, preset in ipairs(library.themes) do
+		if preset.name == Theme.Name then
+			preset.theme = Theme.tokyo
+			return
+		end
+	end
+
+	table.insert(library.themes, 1, {
+		name = Theme.Name,
+		theme = Theme.tokyo,
+	})
+end
+
 function Theme.apply(library)
 	if type(library) ~= "table" or type(library.SetTheme) ~= "function" then
 		return false, "Tokyo UI is missing SetTheme"
@@ -50,6 +68,7 @@ function Theme.apply(library)
 
 	local ok, err = pcall(function()
 		library:SetTheme(Theme.tokyo)
+		registerPreset(library)
 	end)
 
 	if not ok then

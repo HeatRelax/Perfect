@@ -8,12 +8,6 @@ local Misc = {
 		IconShape = "Square",
 		Border = true,
 		ShowTabTitle = true,
-		CustomEmptyPage = {
-			Icon = "lucide:wrench",
-			IconSize = 44,
-			Title = "Misc",
-			Desc = "Extra utilities are coming soon.",
-		},
 	},
 
 	features = {},

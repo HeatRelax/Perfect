@@ -45,22 +45,10 @@ function SilentAim.build(tab, menu, modules)
 	local hooks = {}
 	local namecallHooked = false
 	local namecallOriginal
-	local status
 
 	local function notify(title, content)
 		if menu and type(menu.notify) == "function" then
 			pcall(menu.notify, menu, title, content)
-		end
-	end
-
-	local function setStatus(text)
-		if not status then
-			return
-		end
-		if type(status.SetDesc) == "function" then
-			pcall(status.SetDesc, status, text)
-		elseif type(status.SetTitle) == "function" then
-			pcall(status.SetTitle, status, text)
 		end
 	end
 
@@ -130,13 +118,11 @@ function SilentAim.build(tab, menu, modules)
 
 	local function installNamecallFallback()
 		if type(hookmetamethod) ~= "function" or type(getnamecallmethod) ~= "function" then
-			setStatus("Hooks: remote fallback unavailable")
 			return false
 		end
 
 		local event = replicatedStorage:FindFirstChild("Event")
 		if not event then
-			setStatus("Hooks: Event remote not found")
 			return false
 		end
 
@@ -173,11 +159,9 @@ function SilentAim.build(tab, menu, modules)
 			original = result
 			namecallOriginal = original
 			namecallHooked = true
-			setStatus("Hooks: remote fallback active")
 			return true
 		end
 
-		setStatus("Hooks: remote fallback failed")
 		return false
 	end
 
@@ -190,7 +174,6 @@ function SilentAim.build(tab, menu, modules)
 
 		local core = getWeaponCore()
 		if not core then
-			setStatus("Hooks: WeaponCore not found")
 			return installNamecallFallback()
 		end
 
@@ -219,7 +202,6 @@ function SilentAim.build(tab, menu, modules)
 		end
 
 		if installed > 0 then
-			setStatus("Hooks: " .. tostring(installed) .. "/" .. tostring(#SHOT_NAMES) .. " active")
 			return true
 		end
 
@@ -301,7 +283,9 @@ function SilentAim.build(tab, menu, modules)
 			ensureCircle()
 			updateTarget()
 			startUpdates()
-			installHooks()
+			if not installHooks() then
+				notify("Silent Aim", "Hooks could not be installed. Try Reinstall Hooks.")
+			end
 		else
 			stopUpdates()
 			currentTarget = nil
@@ -309,7 +293,6 @@ function SilentAim.build(tab, menu, modules)
 			if fovCircle then
 				fovCircle:setVisible(false)
 			end
-			setStatus("Hooks: idle")
 		end
 	end
 
@@ -433,17 +416,6 @@ function SilentAim.build(tab, menu, modules)
 				notify("Silent Aim", "Hooks could not be installed.")
 			end
 		end,
-	})
-
-	status = tab:Paragraph({
-		Title = "Hook Status",
-		Desc = "Hooks: idle",
-	})
-
-	tab:Paragraph({
-		Title = "Silent Aim",
-		Desc = "Shots are redirected to the nearest target inside the circle. Your camera never moves. Spread is removed and damage is raised when Max Damage is on.",
-		Image = "lucide:crosshair",
 	})
 
 	menu:addCleanup(function()
