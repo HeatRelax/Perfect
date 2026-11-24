@@ -6,6 +6,8 @@ local runService = game:GetService("RunService")
 local teleportService = game:GetService("TeleportService")
 local tweenService = game:GetService("TweenService")
 local virtualUser = game:GetService("VirtualUser")
+local lighting = game:GetService("Lighting")
+local starterGui = game:GetService("StarterGui")
 
 local Shared = {}
 
@@ -18,6 +20,8 @@ Shared.services = {
 	teleportService = teleportService,
 	tweenService = tweenService,
 	virtualUser = virtualUser,
+	lighting = lighting,
+	starterGui = starterGui,
 }
 
 Shared.settings = {
@@ -128,6 +132,56 @@ function Shared.findPrompt(container)
 		return nil
 	end
 	return container:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+local CASH_SUFFIXES = {
+	K = 1000,
+	M = 1000000,
+	B = 1000000000,
+	T = 1000000000000,
+}
+
+local function formatWithCommas(value)
+	local text = string.format("%.0f", value)
+	local sign = ""
+
+	if text:sub(1, 1) == "-" then
+		sign = "-"
+		text = text:sub(2)
+	end
+
+	local reversed = text:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+	reversed = reversed:gsub("^,", "")
+	return sign .. reversed
+end
+
+-- The cash HUD normally contains "$10342575", but the game sometimes
+-- abbreviates it ("$10M") or adds separators. Expand and re-format it so the
+-- overlay always shows the exact amount with commas.
+function Shared.formatCash(text)
+	local raw = tostring(text or "")
+	local prefix, body = raw:match("^(%D*)(.*)$")
+
+	if not body or body == "" then
+		return raw
+	end
+
+	local numberText, suffix = body:match("^([%d,%.]+)%s*([KkMmBbTt]?)$")
+	if not numberText then
+		return raw
+	end
+
+	local number = tonumber((numberText:gsub(",", "")))
+	if not number then
+		return raw
+	end
+
+	local multiplier = 1
+	if suffix ~= "" then
+		multiplier = CASH_SUFFIXES[suffix:upper()] or 1
+	end
+
+	return prefix .. formatWithCommas(number * multiplier)
 end
 
 function Shared.getStatsHud()

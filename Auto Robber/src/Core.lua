@@ -34,11 +34,12 @@ local function readHudText(pathFn)
 	return "..."
 end
 
-function Core.new(shared)
+function Core.new(shared, performance)
 	local self = setmetatable({}, Core)
 	self.shared = shared
 	self.services = shared.services
 	self.settings = shared.settings
+	self.performance = performance
 	self.state = {
 		rejoining = false,
 		switchingTeam = false,
@@ -516,6 +517,7 @@ function Core:createOverlay()
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "HeistStatsOverlay"
+	gui.DisplayOrder = 2147483647
 	attachOverlay(shared, gui)
 
 	local frame = Instance.new("Frame")
@@ -577,7 +579,7 @@ function Core:createOverlay()
 			local levelText = readHudText(function() return statsHud.LevelHUD.Level.Level end)
 			local xpText = readHudText(function() return statsHud.LevelHUD.Bar.Title end)
 
-			cashLabel.Text = "Cash: " .. cashText
+			cashLabel.Text = "Cash: " .. shared.formatCash(cashText)
 			levelLabel.Text = "Level: " .. levelText
 			xpLabel.Text = "XP: " .. xpText
 			stepLabel.Text = "Step: " .. self.stepText
@@ -585,6 +587,13 @@ function Core:createOverlay()
 			task.wait(0.25)
 		end
 	end)
+
+	if self.performance and type(self.performance.attach) == "function" then
+		local ok, err = pcall(self.performance.attach, self)
+		if not ok then
+			warn("[Auto Robber] Performance boost failed: " .. tostring(err))
+		end
+	end
 end
 
 function Core:startNoclip(isLocked)

@@ -62,6 +62,8 @@ if type(Shared.settings) ~= "table" or type(Shared.settings.robberyOrder) ~= "ta
 	error("src/Shared.lua is missing settings.robberyOrder", 0)
 end
 
+local Performance = loadModule("src/Performance", "attach")
+
 local Core = loadModule("src/Core", "new")
 
 local robberies = {}
@@ -69,7 +71,7 @@ for _, robberyName in ipairs(Shared.settings.robberyOrder) do
 	table.insert(robberies, loadModule("src/robberies/" .. robberyName, "run"))
 end
 
-local core = Core.new(Shared)
+local core = Core.new(Shared, Performance)
 
 local dryRun = false
 if type(getgenv) == "function" then
