@@ -5,7 +5,7 @@ local DEFAULT_TEXT_SIZE = 14
 local DEFAULT_FLAG_SIZE = 12
 local BOX_WIDTH_RATIO = 0.55
 local HEALTH_BAR_WIDTH = 4
-local HEALTH_BAR_GAP = 7
+local HEALTH_BAR_GAP = 3
 local FLAG_GAP = 6
 local FLAG_LINE_GAP = 2
 local MAX_FLAGS = 4
@@ -14,8 +14,10 @@ local CORNER_MIN = 4
 local CORNER_MAX = 24
 local THREE_D_OFFSET = 6
 local REFERENCE_BOX_HEIGHT = 60
-local MIN_BOX_HEIGHT = 60
-local MAX_SCALE = 1.5
+local DEFAULT_MIN_BOX_HEIGHT = 24
+local DEFAULT_MAX_BOX_HEIGHT = 90
+local MIN_BOX_HEIGHT_LIMIT = 12
+local MAX_BOX_HEIGHT_LIMIT = 120
 local NAME_OFFSET = 4
 local DISTANCE_OFFSET = 4
 
@@ -306,16 +308,22 @@ function ESP.build(tab, menu)
 	local teamCheck = false
 	local visibleOnly = false
 	local maxDistance = DEFAULT_MAX_DISTANCE
+	local scaleWithDistance = true
+	local minBoxHeight = DEFAULT_MIN_BOX_HEIGHT
+	local maxBoxHeight = DEFAULT_MAX_BOX_HEIGHT
 
 	local boxStyle = "Full"
 	local boxThickness = 1
 	local boxFill = false
 	local fillOpacity = 0.15
 	local textSize = DEFAULT_TEXT_SIZE
+	local textOutline = true
+	local outlineColor = Color3.fromRGB(0, 0, 0)
 	local teamColors = true
 	local customColor = DEFAULT_COLOR
 	local nameMode = "Username"
 	local healthSide = "Left"
+	local healthGap = HEALTH_BAR_GAP
 	local tracerOrigin = "Bottom"
 
 	local showCash = true
@@ -325,6 +333,7 @@ function ESP.build(tab, menu)
 	local showLabels = true
 	local flagSide = "Right"
 	local flagSize = DEFAULT_FLAG_SIZE
+	local flagGap = FLAG_GAP
 
 	local pool = {}
 	local connection
@@ -334,6 +343,11 @@ function ESP.build(tab, menu)
 		if type(warn) == "function" then
 			warn("[Mad City] " .. tostring(message))
 		end
+	end
+
+	local function styleText(drawing)
+		drawing.Outline = textOutline
+		drawing.OutlineColor = outlineColor
 	end
 
 	local function getCharacter(player)
@@ -558,7 +572,12 @@ function ESP.build(tab, menu)
 
 		-- One distance-derived scale keeps the box, text, health bar, flags,
 		-- and every offset in the same proportion at any range.
-		local boxHeight = round(math.clamp(rawHeight, MIN_BOX_HEIGHT, REFERENCE_BOX_HEIGHT * MAX_SCALE))
+		local lowHeight = math.min(minBoxHeight, maxBoxHeight)
+		local highHeight = math.max(minBoxHeight, maxBoxHeight)
+		local boxHeight = REFERENCE_BOX_HEIGHT
+		if scaleWithDistance then
+			boxHeight = round(math.clamp(rawHeight, lowHeight, highHeight))
+		end
 		local scale = boxHeight / REFERENCE_BOX_HEIGHT
 		local boxWidth = math.max(round(boxHeight * BOX_WIDTH_RATIO), 6)
 
@@ -588,7 +607,11 @@ function ESP.build(tab, menu)
 		drawings.box.Visible = showBox and boxStyle ~= "Corners"
 
 		local cornerVisible = showBox and boxStyle == "Corners"
-		local cornerLength = round(math.clamp(math.min(boxWidth, boxHeight) * CORNER_RATIO, CORNER_MIN, CORNER_MAX))
+		local cornerLength = round(math.clamp(
+			math.min(boxWidth, boxHeight) * CORNER_RATIO,
+			CORNER_MIN * scale,
+			CORNER_MAX * scale
+		))
 		local corners = drawings.corners
 
 		corners[1].From = Vector2.new(leftX, topY)
@@ -657,6 +680,7 @@ function ESP.build(tab, menu)
 		drawings.name.Text = getPlayerName(player)
 		drawings.name.Size = textPixelSize
 		drawings.name.Visible = showName
+		styleText(drawings.name)
 
 		local nameHeight = textPixelSize
 		local nameOk, nameBounds = pcall(function()
@@ -670,6 +694,7 @@ function ESP.build(tab, menu)
 		drawings.distance.Text = string.format("%dm", math.floor(distance + 0.5))
 		drawings.distance.Size = textPixelSize
 		drawings.distance.Visible = showDistance
+		styleText(drawings.distance)
 
 		local distanceHeight = textPixelSize
 		local distanceOk, distanceBounds = pcall(function()
@@ -682,13 +707,13 @@ function ESP.build(tab, menu)
 
 		local healthVisible = false
 		local healthWidth = math.max(round(HEALTH_BAR_WIDTH * scale), 1)
-		local healthGap = math.max(round(HEALTH_BAR_GAP * scale), 1)
+		local scaledHealthGap = healthGap > 0 and math.max(round(healthGap * scale), 1) or 0
 		if showHealth then
 			local maxHealth = math.max(humanoid.MaxHealth, 1)
 			local fraction = math.clamp(humanoid.Health / maxHealth, 0, 1)
 			local fillHeight = round(boxHeight * fraction)
-			local barX = healthSide == "Right" and (rightX + healthGap)
-				or (leftX - healthGap - healthWidth)
+			local barX = healthSide == "Right" and (rightX + scaledHealthGap)
+				or (leftX - scaledHealthGap - healthWidth)
 
 			drawings.healthBg.Color = SHADOW_COLOR
 			drawings.healthBg.Position = Vector2.new(barX, topY)
@@ -738,11 +763,11 @@ function ESP.build(tab, menu)
 		local flagCount = 0
 		local flagOffset = 0
 		if healthVisible and flagSide == healthSide then
-			flagOffset = healthWidth + math.max(round(3 * scale), 1)
+			flagOffset = healthWidth + scaledHealthGap
 		end
 
 		local flagTextSize = math.max(round(flagSize * scale), 1)
-		local flagGap = math.max(round(FLAG_GAP * scale), 1)
+		local scaledFlagGap = flagGap > 0 and math.max(round(flagGap * scale), 1) or 0
 		local flagLineGap = math.max(round(FLAG_LINE_GAP * scale), 1)
 
 		for index = 1, MAX_FLAGS do
@@ -764,14 +789,15 @@ function ESP.build(tab, menu)
 
 				local flagX
 				if flagSide == "Left" then
-					flagX = leftX - flagGap - flagOffset - flagWidth
+					flagX = leftX - scaledFlagGap - flagOffset - flagWidth
 				else
-					flagX = rightX + flagGap + flagOffset
+					flagX = rightX + scaledFlagGap + flagOffset
 				end
 
 				local flagY = topY + (index - 1) * (flagTextSize + flagLineGap)
 				drawing.Position = roundVec(flagX, flagY)
 				drawing.Visible = true
+				styleText(drawing)
 				flagCount += 1
 			else
 				drawing.Visible = false
@@ -982,6 +1008,24 @@ function ESP.build(tab, menu)
 	})
 
 	appearanceSection:Toggle({
+		Title = "Text Outline",
+		Desc = "Outline the name, distance, and flags",
+		Value = true,
+		Callback = function(state)
+			textOutline = state
+		end,
+	})
+
+	appearanceSection:ColorPicker({
+		Title = "Outline Color",
+		Desc = "Color of the text outline",
+		Value = Color3.fromRGB(0, 0, 0),
+		Callback = function(color)
+			outlineColor = color
+		end,
+	})
+
+	appearanceSection:Toggle({
 		Title = "Team Colors",
 		Desc = "Use law and criminal colors instead of ESP Color",
 		Value = true,
@@ -1019,6 +1063,20 @@ function ESP.build(tab, menu)
 		end,
 	})
 
+	appearanceSection:Slider({
+		Title = "Health Gap",
+		Desc = "Space between the health bar and box",
+		Step = 1,
+		Value = {
+			Min = 0,
+			Max = 20,
+			Default = HEALTH_BAR_GAP,
+		},
+		Callback = function(value)
+			healthGap = value
+		end,
+	})
+
 	appearanceSection:Dropdown({
 		Title = "Tracer Origin",
 		Desc = "Where tracers start on screen",
@@ -1026,6 +1084,49 @@ function ESP.build(tab, menu)
 		Value = "Bottom",
 		Callback = function(value)
 			tracerOrigin = value
+		end,
+	})
+
+	local scalingSection = tab:Section({
+		Title = "Scaling",
+		Desc = "Control how the ESP resizes with distance",
+		Box = true,
+	})
+
+	scalingSection:Toggle({
+		Title = "Scale With Distance",
+		Desc = "Shrink the whole ESP as players get farther away",
+		Value = true,
+		Callback = function(state)
+			scaleWithDistance = state
+		end,
+	})
+
+	scalingSection:Slider({
+		Title = "Min Height",
+		Desc = "Smallest box height in pixels",
+		Step = 1,
+		Value = {
+			Min = MIN_BOX_HEIGHT_LIMIT,
+			Max = 60,
+			Default = DEFAULT_MIN_BOX_HEIGHT,
+		},
+		Callback = function(value)
+			minBoxHeight = value
+		end,
+	})
+
+	scalingSection:Slider({
+		Title = "Max Height",
+		Desc = "Largest box height in pixels",
+		Step = 1,
+		Value = {
+			Min = 60,
+			Max = MAX_BOX_HEIGHT_LIMIT,
+			Default = DEFAULT_MAX_BOX_HEIGHT,
+		},
+		Callback = function(value)
+			maxBoxHeight = value
 		end,
 	})
 
@@ -1089,6 +1190,20 @@ function ESP.build(tab, menu)
 		Value = "Right",
 		Callback = function(value)
 			flagSide = value
+		end,
+	})
+
+	flagsSection:Slider({
+		Title = "Flag Gap",
+		Desc = "Space between flags and the box",
+		Step = 1,
+		Value = {
+			Min = 0,
+			Max = 20,
+			Default = FLAG_GAP,
+		},
+		Callback = function(value)
+			flagGap = value
 		end,
 	})
 
