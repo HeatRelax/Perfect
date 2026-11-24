@@ -10,6 +10,8 @@ Shared.services = {
 	players = cloneref(game:GetService("Players")),
 	replicatedStorage = cloneref(game:GetService("ReplicatedStorage")),
 	runService = cloneref(game:GetService("RunService")),
+	userInputService = cloneref(game:GetService("UserInputService")),
+	workspace = cloneref(game:GetService("Workspace")),
 }
 
 Shared.settings = {
@@ -42,7 +44,7 @@ Shared.settings = {
 	},
 
 	-- Each feature builds its own tab, in this order.
-	featureOrder = { "Movement" },
+	featureOrder = { "Movement", "Player", "Teleport", "Visuals", "Misc" },
 }
 
 return Shared

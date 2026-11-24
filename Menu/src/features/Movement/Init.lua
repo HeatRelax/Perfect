@@ -1,7 +1,7 @@
 local Movement = {
 	tab = {
 		Title = "Movement",
-		Icon = "solar:running-bold",
+		Icon = "lucide:footprints",
 		IconColor = Color3.fromHex("#10C550"),
 		IconShape = "Square",
 		Border = true,

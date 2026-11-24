@@ -11,11 +11,28 @@ src/
   features/
     Movement/
       Init.lua            tab definition + feature list
-      Flight.lua          one feature per file
+      Flight.lua          fly toggle, keybind, speed slider
+    Player/
+      Init.lua
+    Teleport/
+      Init.lua
+    Visuals/
+      Init.lua
+    Misc/
+      Init.lua
 ```
 
-The menu loads WindUI and opens a window with a Movement tab. Each feature file
-under the tab folder adds its own controls.
+The menu loads WindUI and opens Movement, Player, Teleport, Visuals, and Misc
+tabs. Each feature file under a tab folder adds its own controls.
+
+## Flight
+
+The Movement tab includes Flight:
+
+- Toggle **Fly**, or press the configured keybind (default `F`).
+- `WASD` moves relative to the camera.
+- `Space` moves up, `LeftControl` moves down.
+- **Fly Speed** slider adjusts movement speed.
 
 ## Hosting
 
