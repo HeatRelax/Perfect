@@ -32,17 +32,18 @@ src/
       Init.lua            tab definition + feature list
       ESP.lua             player boxes, names, health, tracers, info flags
     Misc/
-      Init.lua            scaffold, not loaded yet
+      Init.lua            placeholder tab, no controls yet
 Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
 
-The menu opens Movement, Combat, and Visuals, plus Tokyo's Settings tab. Each
-feature file adds its own controls to its tab. Tokyo UI lays tabs out as a flat
-row and splits every tab into two columns; the adapter alternates sections
+The menu opens Combat, Visuals, Movement, and Misc, plus Tokyo's Settings tab.
+Each feature file adds its own controls to its tab. Tokyo UI lays tabs out as a
+flat row and splits every tab into two columns; the adapter alternates sections
 across those columns. Controls are grouped with divider lines instead of
-paragraph text. The empty Player, Teleport, and Misc scaffolds stay out of
-`featureOrder` until they have real controls.
+paragraph text. Misc is loaded as a placeholder tab and currently has no
+controls. The empty Player and Teleport scaffolds stay out of `featureOrder`
+until they have real controls.
 
 ## Interface
 
@@ -77,7 +78,7 @@ Moves the camera onto the nearest target inside the FOV circle.
 - **Smoothness**, **FOV** (10–2000 px, 1 px steps), and **Max Distance** sliders.
 - **Circle Color** picks the FOV outline color and transparency, with
   **Circle Thickness**, **Circle Sides**, **Circle Fill**, and **Fill Opacity**
-  controls for the ring.
+  (5–100%) controls for the ring.
 - **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
 - **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
 - The **Prediction Time** slider stays locked until **Prediction** is enabled.
@@ -91,7 +92,7 @@ Re-aims shots without moving the camera or your input.
 - **Enabled** toggle, **Toggle Key** (default `T`), **FOV** (10–2000 px,
   1 px steps), and **Max Distance** sliders.
 - **Circle Color**, **Circle Thickness**, **Circle Sides**, **Circle Fill**, and
-  **Fill Opacity** customize the FOV ring.
+  **Fill Opacity** (5–100%) customize the FOV ring.
 - **Target Part**, **Team Check**, **Wall Check**, **Max Damage**, **Show FOV**.
 - Hooks `WeaponCore.ShootGun`, `ShootShotgun`, `ShootTazer`, and `ShootRayGun`,
   replacing the aim point and spread, and setting damage to `1e9` when

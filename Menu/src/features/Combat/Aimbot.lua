@@ -432,7 +432,7 @@ function Aimbot.build(tab, menu, modules)
 		Suffix = "%",
 		Value = {
 			Min = 5,
-			Max = 50,
+			Max = 100,
 			Default = 15,
 		},
 		Callback = function(value)
