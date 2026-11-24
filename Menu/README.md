@@ -30,7 +30,7 @@ src/
       Init.lua            scaffold, not loaded yet
     Visuals/
       Init.lua            tab definition + feature list
-      ESP.lua             player boxes, names, health, distance, tracers
+      ESP.lua             player boxes, names, health, tracers, info flags
     Misc/
       Init.lua            scaffold, not loaded yet
 Decompiled/
@@ -100,12 +100,19 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
 
 - **Enabled** toggle.
 - **Box**, **Name**, **Health**, **Distance**, and **Tracer** toggles.
-- **Team Check** hides players in the same Mad City category as you (law,
-  criminal, or wanted).
-- **Visible Only** raycasts to the player and skips anyone behind a wall.
-- **Max Distance** slider caps the draw distance.
+- **Appearance**: **Box Style** (Full, Corners, 3D), **Box Thickness**,
+  **Box Fill** and **Fill Opacity**, **Text Size**, **Team Colors**,
+  **ESP Color**, **Name Mode** (username, display name, or both),
+  **Health Side**, and **Tracer Origin** (bottom, center, or mouse).
+- **Info Flags** sit beside the box: **Cash**, **Rank**, **Bounty**,
+  **Weapon** (the held tool), and **Weapon Equipped**. Flags can show labels,
+  move to the left side, and use their own text size.
+- **Filters**: **Team Check** hides players in the same Mad City category as
+  you (law, criminal, or wanted); **Visible Only** raycasts to the player and
+  skips anyone behind a wall; **Max Distance** caps the draw distance.
 - Box and tracer colors follow the player's team category, and the health bar
-  fades from red to green as health fills.
+  fades from red to green as health fills. Turn **Team Colors** off to use a
+  custom **ESP Color** instead.
 
 Drawings are pooled per player and removed on unload or when a player leaves.
 

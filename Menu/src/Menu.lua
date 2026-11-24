@@ -179,6 +179,8 @@ function Menu:wrapOption(section, option, kind)
 			self._option:Select(value)
 		elseif self._kind == "keybind" then
 			self._option:SetBind(toKeyCode(value) or "none")
+		elseif self._kind == "color" then
+			self._option:SetColor(value)
 		elseif self._kind == "button" then
 			self:SetText(value)
 		end
@@ -187,6 +189,12 @@ function Menu:wrapOption(section, option, kind)
 	function proxy:SetText(value)
 		if type(self._option.SetText) == "function" then
 			self._option:SetText(tostring(value or ""))
+		end
+	end
+
+	function proxy:SetTransparency(value)
+		if self._kind == "color" and type(self._option.SetTrans) == "function" then
+			self._option:SetTrans(tonumber(value) or 0)
 		end
 	end
 
@@ -428,6 +436,34 @@ function Section:Button(data)
 	})
 
 	return self.menu:wrapOption(self, option, "button")
+end
+
+function Section:ColorPicker(data)
+	data = data or {}
+
+	local initial = data.Value
+	if typeof(initial) ~= "Color3" then
+		initial = Color3.fromRGB(255, 255, 255)
+	end
+
+	local option = self.tokyo:AddColor({
+		text = tostring(data.Title or "Color"),
+		flag = self.menu:nextFlag(data.Title),
+		color = initial,
+		trans = tonumber(data.Transparency) or 0,
+		callback = function(color, transparency)
+			if type(data.Callback) == "function" then
+				data.Callback(color, transparency)
+			end
+		end,
+	})
+
+	option:SetColor(initial, true)
+	if type(data.Transparency) == "number" then
+		option:SetTrans(tonumber(data.Transparency) or 0, true)
+	end
+
+	return self.menu:wrapOption(self, option, "color")
 end
 
 function Section:Separator(data)
