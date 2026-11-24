@@ -29,18 +29,19 @@ src/
     Teleport/
       Init.lua            scaffold, not loaded yet
     Visuals/
-      Init.lua            scaffold, not loaded yet
+      Init.lua            tab definition + feature list
+      ESP.lua             player boxes, names, health, distance, tracers
     Misc/
       Init.lua            scaffold, not loaded yet
 Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
 
-The menu opens Movement and Combat, plus Tokyo's Settings tab. Each feature
-file adds its own controls to its tab. Tokyo UI lays tabs out as a flat row and
-splits every tab into two columns; the adapter alternates sections across those
-columns. Controls are grouped with divider lines instead of paragraph text.
-The empty Player, Teleport, Visuals, and Misc scaffolds stay out of
+The menu opens Movement, Combat, and Visuals, plus Tokyo's Settings tab. Each
+feature file adds its own controls to its tab. Tokyo UI lays tabs out as a flat
+row and splits every tab into two columns; the adapter alternates sections
+across those columns. Controls are grouped with divider lines instead of
+paragraph text. The empty Player, Teleport, and Misc scaffolds stay out of
 `featureOrder` until they have real controls.
 
 ## Interface
@@ -93,6 +94,21 @@ Re-aims shots without moving the camera or your input.
   **Max Damage** is on. If WeaponCore hooks cannot be installed, the remote
   `ReplicatedStorage.Event` namecall path is used as a fallback.
 
+## Visuals
+
+The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
+
+- **Enabled** toggle.
+- **Box**, **Name**, **Health**, **Distance**, and **Tracer** toggles.
+- **Team Check** hides players in the same Mad City category as you (law,
+  criminal, or wanted).
+- **Visible Only** raycasts to the player and skips anyone behind a wall.
+- **Max Distance** slider caps the draw distance.
+- Box and tracer colors follow the player's team category, and the health bar
+  fades from red to green as health fills.
+
+Drawings are pooled per player and removed on unload or when a player leaves.
+
 ## Unload
 
 Loading the menu again automatically unloads the previous instance. You can
@@ -103,7 +119,8 @@ getgenv().MadCityMenu.Unload()
 ```
 
 Unloading runs feature cleanups, disconnects input connections, removes FOV
-circles, restores WeaponCore hooks, and calls Tokyo UI's `Unload()`, which
+circles and ESP drawings, restores WeaponCore hooks, and calls Tokyo UI's
+`Unload()`, which
 removes every Drawing object and destroys the `MadCityTokyo` ScreenGui. The
 Settings tab's **Unload** button uses this same path.
 

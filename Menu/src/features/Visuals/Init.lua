@@ -1,7 +1,7 @@
 local Visuals = {
 	tab = {
 		Title = "Visuals",
-		Desc = "ESP, lighting, and overlays",
+		Desc = "Player ESP and overlays",
 		section = "World",
 		Icon = "lucide:scan-eye",
 		IconColor = Color3.fromHex("#FBBF24"),
@@ -10,7 +10,7 @@ local Visuals = {
 		ShowTabTitle = true,
 	},
 
-	features = {},
+	features = { "ESP" },
 }
 
 function Visuals.build(menu)
