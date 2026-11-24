@@ -8,11 +8,16 @@ local HEALTH_BAR_WIDTH = 4
 local HEALTH_BAR_GAP = 7
 local FLAG_GAP = 6
 local FLAG_LINE_GAP = 2
-local MAX_FLAGS = 5
+local MAX_FLAGS = 4
 local CORNER_RATIO = 0.22
 local CORNER_MIN = 4
-local CORNER_MAX = 14
+local CORNER_MAX = 24
 local THREE_D_OFFSET = 6
+local REFERENCE_BOX_HEIGHT = 60
+local MIN_BOX_HEIGHT = 60
+local MAX_SCALE = 1.5
+local NAME_OFFSET = 4
+local DISTANCE_OFFSET = 4
 
 local TEAM_CATEGORIES = {
 	Police = "law",
@@ -45,8 +50,6 @@ local CASH_COLOR = Color3.fromRGB(74, 222, 128)
 local RANK_COLOR = Color3.fromRGB(96, 165, 250)
 local BOUNTY_COLOR = Color3.fromRGB(251, 191, 36)
 local WEAPON_COLOR = Color3.fromRGB(103, 232, 249)
-local EQUIPPED_COLOR = Color3.fromRGB(74, 222, 128)
-local UNEQUIPPED_COLOR = Color3.fromRGB(148, 163, 184)
 
 local function getCategory(player)
 	if not player then
@@ -122,6 +125,14 @@ local function formatNumber(value)
 	local reversed = text:reverse():gsub("(%d%d%d)", "%1,"):reverse()
 	reversed = reversed:gsub("^,", "")
 	return sign .. reversed
+end
+
+local function round(value)
+	return math.floor(value + 0.5)
+end
+
+local function roundVec(x, y)
+	return Vector2.new(round(x), round(y))
 end
 
 local function createEntry(color)
@@ -311,7 +322,6 @@ function ESP.build(tab, menu)
 	local showRank = true
 	local showBounty = true
 	local showWeapon = true
-	local showWeaponEquipped = true
 	local showLabels = true
 	local flagSide = "Right"
 	local flagSize = DEFAULT_FLAG_SIZE
@@ -402,16 +412,6 @@ function ESP.build(tab, menu)
 		return tonumber(value)
 	end
 
-	local function getAttributeBoolean(player, attribute)
-		local ok, value = pcall(function()
-			return player:GetAttribute(attribute)
-		end)
-		if ok and type(value) == "boolean" then
-			return value
-		end
-		return nil
-	end
-
 	local function getCash(player)
 		local leaderstats = player:FindFirstChild("leaderstats")
 		local cash = leaderstats and leaderstats:FindFirstChild("Cash")
@@ -494,19 +494,8 @@ function ESP.build(tab, menu)
 			local weapon = getHeldWeapon(character)
 			if weapon and weapon ~= "" then
 				table.insert(flags, {
-					text = showLabels and ("Weapon: " .. weapon) or weapon,
+					text = weapon,
 					color = WEAPON_COLOR,
-				})
-			end
-		end
-
-		if showWeaponEquipped then
-			local equipped = getAttributeBoolean(player, "WeaponEquipped")
-			if equipped ~= nil then
-				local value = equipped and "Yes" or "No"
-				table.insert(flags, {
-					text = showLabels and ("Equipped: " .. value) or value,
-					color = equipped and EQUIPPED_COLOR or UNEQUIPPED_COLOR,
 				})
 			end
 		end
@@ -533,11 +522,8 @@ function ESP.build(tab, menu)
 			return
 		end
 
-		local topY = topScreen.Y
-		local bottomY = bottomScreen.Y
-		local height = bottomY - topY
-
-		if height < 4 then
+		local rawHeight = bottomScreen.Y - topScreen.Y
+		if rawHeight < 1 then
 			hideEntry(entry)
 			return
 		end
@@ -570,29 +556,39 @@ function ESP.build(tab, menu)
 		local category = getCategory(player)
 		local color = teamColors and (CATEGORY_COLORS[category] or customColor) or customColor
 
-		local width = math.max(height * BOX_WIDTH_RATIO, 6)
-		local centerX = topScreen.X
-		local leftX = centerX - width * 0.5
-		local rightX = centerX + width * 0.5
+		-- One distance-derived scale keeps the box, text, health bar, flags,
+		-- and every offset in the same proportion at any range.
+		local boxHeight = round(math.clamp(rawHeight, MIN_BOX_HEIGHT, REFERENCE_BOX_HEIGHT * MAX_SCALE))
+		local scale = boxHeight / REFERENCE_BOX_HEIGHT
+		local boxWidth = math.max(round(boxHeight * BOX_WIDTH_RATIO), 6)
+
+		local centerX = round((topScreen.X + bottomScreen.X) * 0.5)
+		local centerY = round((topScreen.Y + bottomScreen.Y) * 0.5)
+		local leftX = centerX - math.floor(boxWidth * 0.5)
+		local rightX = leftX + boxWidth
+		local topY = centerY - math.floor(boxHeight * 0.5)
+		local bottomY = topY + boxHeight
 		local drawings = entry.drawings
+
+		local thickness = math.max(round(boxThickness * scale), 1)
 
 		drawings.fill.Visible = showBox and boxFill
 		if showBox and boxFill then
 			drawings.fill.Color = color
 			drawings.fill.Transparency = fillOpacity
 			drawings.fill.Position = Vector2.new(leftX, topY)
-			drawings.fill.Size = Vector2.new(width, height)
+			drawings.fill.Size = Vector2.new(boxWidth, boxHeight)
 		end
 
 		drawings.box.Color = color
-		drawings.box.Thickness = boxThickness
+		drawings.box.Thickness = thickness
 		drawings.box.Transparency = 1
 		drawings.box.Position = Vector2.new(leftX, topY)
-		drawings.box.Size = Vector2.new(width, height)
+		drawings.box.Size = Vector2.new(boxWidth, boxHeight)
 		drawings.box.Visible = showBox and boxStyle ~= "Corners"
 
 		local cornerVisible = showBox and boxStyle == "Corners"
-		local cornerLength = math.clamp(math.min(width, height) * CORNER_RATIO, CORNER_MIN, CORNER_MAX)
+		local cornerLength = round(math.clamp(math.min(boxWidth, boxHeight) * CORNER_RATIO, CORNER_MIN, CORNER_MAX))
 		local corners = drawings.corners
 
 		corners[1].From = Vector2.new(leftX, topY)
@@ -614,7 +610,7 @@ function ESP.build(tab, menu)
 
 		for _, corner in ipairs(corners) do
 			corner.Color = color
-			corner.Thickness = boxThickness
+			corner.Thickness = thickness
 			corner.Transparency = 1
 			corner.Visible = cornerVisible
 		end
@@ -622,16 +618,17 @@ function ESP.build(tab, menu)
 		local threeD = showBox and boxStyle == "3D"
 		drawings.boxBack.Visible = threeD
 		if threeD then
-			local backLeft = leftX + THREE_D_OFFSET
-			local backTop = topY - THREE_D_OFFSET
-			local backRight = backLeft + width
-			local backBottom = backTop + height
+			local offset = math.max(round(THREE_D_OFFSET * scale), 1)
+			local backLeft = leftX + offset
+			local backTop = topY - offset
+			local backRight = backLeft + boxWidth
+			local backBottom = backTop + boxHeight
 
 			drawings.boxBack.Color = color
-			drawings.boxBack.Thickness = boxThickness
+			drawings.boxBack.Thickness = thickness
 			drawings.boxBack.Transparency = 0.55
 			drawings.boxBack.Position = Vector2.new(backLeft, backTop)
-			drawings.boxBack.Size = Vector2.new(width, height)
+			drawings.boxBack.Size = Vector2.new(boxWidth, boxHeight)
 
 			local connectors = drawings.connectors
 			connectors[1].From = Vector2.new(leftX, topY)
@@ -645,7 +642,7 @@ function ESP.build(tab, menu)
 
 			for _, connector in ipairs(connectors) do
 				connector.Color = color
-				connector.Thickness = boxThickness
+				connector.Thickness = thickness
 				connector.Transparency = 0.7
 				connector.Visible = true
 			end
@@ -655,32 +652,52 @@ function ESP.build(tab, menu)
 			end
 		end
 
+		local textPixelSize = math.max(round(textSize * scale), 1)
+
 		drawings.name.Text = getPlayerName(player)
-		drawings.name.Size = textSize
-		drawings.name.Position = Vector2.new(centerX, topY - textSize - 4)
+		drawings.name.Size = textPixelSize
 		drawings.name.Visible = showName
 
+		local nameHeight = textPixelSize
+		local nameOk, nameBounds = pcall(function()
+			return drawings.name.TextBounds
+		end)
+		if nameOk and nameBounds and nameBounds.Y > 0 then
+			nameHeight = nameBounds.Y
+		end
+		drawings.name.Position = roundVec(centerX, topY - round(NAME_OFFSET * scale) - nameHeight * 0.5)
+
 		drawings.distance.Text = string.format("%dm", math.floor(distance + 0.5))
-		drawings.distance.Size = textSize
-		drawings.distance.Position = Vector2.new(centerX, bottomY + 4)
+		drawings.distance.Size = textPixelSize
 		drawings.distance.Visible = showDistance
 
+		local distanceHeight = textPixelSize
+		local distanceOk, distanceBounds = pcall(function()
+			return drawings.distance.TextBounds
+		end)
+		if distanceOk and distanceBounds and distanceBounds.Y > 0 then
+			distanceHeight = distanceBounds.Y
+		end
+		drawings.distance.Position = roundVec(centerX, bottomY + round(DISTANCE_OFFSET * scale) + distanceHeight * 0.5)
+
 		local healthVisible = false
+		local healthWidth = math.max(round(HEALTH_BAR_WIDTH * scale), 1)
+		local healthGap = math.max(round(HEALTH_BAR_GAP * scale), 1)
 		if showHealth then
 			local maxHealth = math.max(humanoid.MaxHealth, 1)
 			local fraction = math.clamp(humanoid.Health / maxHealth, 0, 1)
-			local barHeight = height * fraction
-			local barX = healthSide == "Right" and (rightX + HEALTH_BAR_GAP)
-				or (leftX - HEALTH_BAR_GAP - HEALTH_BAR_WIDTH)
+			local fillHeight = round(boxHeight * fraction)
+			local barX = healthSide == "Right" and (rightX + healthGap)
+				or (leftX - healthGap - healthWidth)
 
 			drawings.healthBg.Color = SHADOW_COLOR
 			drawings.healthBg.Position = Vector2.new(barX, topY)
-			drawings.healthBg.Size = Vector2.new(HEALTH_BAR_WIDTH, height)
-			drawings.healthFill.Position = Vector2.new(barX, bottomY - barHeight)
-			drawings.healthFill.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
+			drawings.healthBg.Size = Vector2.new(healthWidth, boxHeight)
+			drawings.healthFill.Position = Vector2.new(barX, bottomY - fillHeight)
+			drawings.healthFill.Size = Vector2.new(healthWidth, fillHeight)
 			drawings.healthFill.Color = HEALTH_LOW:Lerp(HEALTH_HIGH, fraction)
 
-			healthVisible = barHeight > 0
+			healthVisible = fillHeight > 0
 		end
 
 		drawings.healthBg.Visible = healthVisible
@@ -703,8 +720,8 @@ function ESP.build(tab, menu)
 				end
 			end
 
-			drawings.tracer.From = Vector2.new(fromX, fromY)
-			drawings.tracer.To = Vector2.new(centerX, bottomY)
+			drawings.tracer.From = roundVec(fromX, fromY)
+			drawings.tracer.To = roundVec(centerX, bottomY)
 			drawings.tracer.Color = color
 			drawings.tracer.Thickness = 1
 		end
@@ -721,8 +738,12 @@ function ESP.build(tab, menu)
 		local flagCount = 0
 		local flagOffset = 0
 		if healthVisible and flagSide == healthSide then
-			flagOffset = HEALTH_BAR_WIDTH + 3
+			flagOffset = healthWidth + math.max(round(3 * scale), 1)
 		end
+
+		local flagTextSize = math.max(round(flagSize * scale), 1)
+		local flagGap = math.max(round(FLAG_GAP * scale), 1)
+		local flagLineGap = math.max(round(FLAG_LINE_GAP * scale), 1)
 
 		for index = 1, MAX_FLAGS do
 			local drawing = drawings.flags[index]
@@ -730,25 +751,26 @@ function ESP.build(tab, menu)
 
 			if flag then
 				drawing.Text = flag.text
-				drawing.Size = flagSize
+				drawing.Size = flagTextSize
 				drawing.Color = flag.color
 
 				local flagWidth = 0
-				local ok, bounds = pcall(function()
+				local flagOk, flagBounds = pcall(function()
 					return drawing.TextBounds
 				end)
-				if ok and bounds then
-					flagWidth = bounds.X
+				if flagOk and flagBounds then
+					flagWidth = round(flagBounds.X)
 				end
 
 				local flagX
 				if flagSide == "Left" then
-					flagX = leftX - FLAG_GAP - flagOffset - flagWidth
+					flagX = leftX - flagGap - flagOffset - flagWidth
 				else
-					flagX = rightX + FLAG_GAP + flagOffset
+					flagX = rightX + flagGap + flagOffset
 				end
 
-				drawing.Position = Vector2.new(flagX, topY + (index - 1) * (flagSize + FLAG_LINE_GAP))
+				local flagY = topY + (index - 1) * (flagTextSize + flagLineGap)
+				drawing.Position = roundVec(flagX, flagY)
 				drawing.Visible = true
 				flagCount += 1
 			else
@@ -1046,15 +1068,6 @@ function ESP.build(tab, menu)
 		Value = true,
 		Callback = function(state)
 			showWeapon = state
-		end,
-	})
-
-	flagsSection:Toggle({
-		Title = "Weapon Equipped",
-		Desc = "Show the WeaponEquipped status",
-		Value = true,
-		Callback = function(state)
-			showWeaponEquipped = state
 		end,
 	})
 

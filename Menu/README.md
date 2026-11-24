@@ -104,15 +104,19 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
   **Box Fill** and **Fill Opacity**, **Text Size**, **Team Colors**,
   **ESP Color**, **Name Mode** (username, display name, or both),
   **Health Side**, and **Tracer Origin** (bottom, center, or mouse).
-- **Info Flags** sit beside the box: **Cash**, **Rank**, **Bounty**,
-  **Weapon** (the held tool), and **Weapon Equipped**. Flags can show labels,
-  move to the left side, and use their own text size.
+- **Info Flags** sit beside the box: **Cash**, **Rank**, **Bounty**, and
+  **Weapon** (the held tool name, shown without a label). Flags can show
+  labels, move to the left side, and use their own text size.
 - **Filters**: **Team Check** hides players in the same Mad City category as
   you (law, criminal, or wanted); **Visible Only** raycasts to the player and
   skips anyone behind a wall; **Max Distance** caps the draw distance.
 - Box and tracer colors follow the player's team category, and the health bar
   fades from red to green as health fills. Turn **Team Colors** off to use a
   custom **ESP Color** instead.
+- The box, text, health bar, flags, gaps, and offsets all share one
+  distance-based scale. The box stays between 60 and 90 pixels tall, so far
+  players stay readable instead of shrinking under fixed-size text, and every
+  position and size is rounded to whole pixels for crisp rendering.
 
 Drawings are pooled per player and removed on unload or when a player leaves.
 
