@@ -34,6 +34,7 @@ src/
     Misc/
       Init.lua            tab definition + feature list
       Team.lua            Others section with team dropdown and Set Team button
+      Teleports.lua       Teleports section with categorized destinations
 Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
@@ -131,12 +132,73 @@ Drawings are pooled per player and removed on unload or when a player leaves.
 
 ## Misc
 
-The Misc tab includes an **Others** section for team selection.
+The Misc tab includes an **Others** section for team selection and a
+**Teleports** section for fast travel.
+
+### Others
 
 - **Team** dropdown: `Prisoners`, `Police`, `Heroes`, `Criminals`, `Wanted`,
   and `Battle Royale`.
 - **Set Team** invokes `ReplicatedStorage.RemoteFunction` with
   `InvokeServer("SetTeam", team)` and reports the result.
+
+### Teleports
+
+The **Teleports** section is a categorized fast-travel menu.
+
+- **Category** groups the destinations: `Heists`, `Bases`, `Prison`,
+  `Airport`, `Shops`, `Miniheists`, `Islands`, and `Landmarks`.
+- **Destination** lists every location in the chosen category. The selected
+  coordinates are shown above the controls.
+- **Height Offset** (0–10 studs, default 3) lifts the arrival point so the
+  character does not clip into the floor.
+- **Teleport** pivots the character to the selected position, stands the
+  character up if seated, and clears linear and angular velocity.
+
+| Category | Destination | Position |
+| --- | --- | --- |
+| Heists | Club Vault (Inside) | 1328, 146, -129 |
+| Heists | Club Vault (Outside) | 1341, 144, -96 |
+| Heists | Club Front | 1286, 26, 31 |
+| Heists | Bank Front | 793, 28, 475 |
+| Heists | Bank Vault (Outside) | 732, 1, 488 |
+| Heists | Bank Vault (Inside) | 760, 1, 479 |
+| Heists | Casino Vault (Inside) | 1650, 26, 524 |
+| Heists | Casino Vault (Outside) | 1676, 26, 524 |
+| Heists | Casino Front | 1779, 26, 685 |
+| Heists | Jewelry (Inside) | -100, 26, 784 |
+| Heists | Jewelry Front | -132, 25, 716 |
+| Heists | Jewelry Roof | -75, 87, 820 |
+| Heists | Gunshop | -1621, 44, 688 |
+| Bases | Criminal Base (Inside) | 2139, 26, 375 |
+| Bases | Criminal Base Front | 2039, 26, 356 |
+| Bases | Heroes Base Front | -1383, 11, 1213 |
+| Bases | Heroes Base (Inside) | -1688, 10, 1523 |
+| Bases | Heroes Base Spawn | -1753, 77, 1597 |
+| Prison | Prison Cells | -813, 53, -3253 |
+| Prison | Prison Yard | -1055, 53, -3106 |
+| Prison | Prison Police Spawn | -966, 53, -2954 |
+| Prison | Prison Gates (Inside) | -892, 54, -2862 |
+| Prison | Prison Front | -891, 54, -2671 |
+| Prison | Prison Secret Place | -1028, 25, -2618 |
+| Airport | Airport Miniheists | -2162, 29, -1408 |
+| Airport | Airport Jetpack Area | -2183, 29, -1551 |
+| Airport | Airport Vehicles | -2408, 25, -1280 |
+| Shops | Jewelry Gas Station | 420, 25, 1030 |
+| Shops | Gun Store Gas Station | -1681, 43, 460 |
+| Shops | Cluckles | 1255, 26, 624 |
+| Shops | Vehicle Store | 207, 26, -631 |
+| Miniheists | Restaurant Miniheist | 664, 37, -104 |
+| Miniheists | Market Miniheist | 808, 26, -439 |
+| Miniheists | House Miniheist 1 | 1622, 25, 1585 |
+| Miniheists | House Miniheist 2 | 1450, 37, -1199 |
+| Islands | Island Group 1 | 1664, 61, 2891 |
+| Islands | Island Group 2 | -868, 98, 3202 |
+| Islands | Island Group 3 | -2914, 76, 1413 |
+| Islands | Island Group 4 | -2981, 76, -2045 |
+| Islands | Island Group 5 | 1408, 52, -2993 |
+| Landmarks | Lighthouse | 2182, 18, -2489 |
+| Landmarks | Shipwreck | -1062, 13, 2867 |
 
 ## Unload
 

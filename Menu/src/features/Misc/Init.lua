@@ -10,7 +10,7 @@ local Misc = {
 		ShowTabTitle = true,
 	},
 
-	features = { "Team" },
+	features = { "Team", "Teleports" },
 }
 
 function Misc.build(menu)
