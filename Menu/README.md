@@ -32,7 +32,8 @@ src/
       Init.lua            tab definition + feature list
       ESP.lua             player boxes, names, health, tracers, info flags
     Misc/
-      Init.lua            placeholder tab, no controls yet
+      Init.lua            tab definition + feature list
+      Team.lua            Others section with team dropdown and Set Team button
 Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
@@ -41,9 +42,8 @@ The menu opens Combat, Visuals, Movement, and Misc, plus Tokyo's Settings tab.
 Each feature file adds its own controls to its tab. Tokyo UI lays tabs out as a
 flat row and splits every tab into two columns; the adapter alternates sections
 across those columns. Controls are grouped with divider lines instead of
-paragraph text. Misc is loaded as a placeholder tab and currently has no
-controls. The empty Player and Teleport scaffolds stay out of `featureOrder`
-until they have real controls.
+paragraph text. The empty Player and Teleport scaffolds stay out of
+`featureOrder` until they have real controls.
 
 ## Interface
 
@@ -82,8 +82,8 @@ Moves the camera onto the nearest target inside the FOV circle.
 - **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
 - **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
 - The **Prediction Time** slider stays locked until **Prediction** is enabled.
-- The FOV circle is centered on the game crosshair, which sits 58 pixels above
-  the camera projection center.
+- The FOV circle is dead-center in the viewport, with no crosshair or GUI inset
+  offset.
 
 ### Silent Aim
 
@@ -128,6 +128,15 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
   is rounded to whole pixels for crisp rendering.
 
 Drawings are pooled per player and removed on unload or when a player leaves.
+
+## Misc
+
+The Misc tab includes an **Others** section for team selection.
+
+- **Team** dropdown: `Prisoners`, `Police`, `Heroes`, `Criminals`, `Wanted`,
+  and `Battle Royale`.
+- **Set Team** invokes `ReplicatedStorage.RemoteFunction` with
+  `InvokeServer("SetTeam", team)` and reports the result.
 
 ## Unload
 

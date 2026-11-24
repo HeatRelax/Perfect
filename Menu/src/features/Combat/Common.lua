@@ -91,34 +91,11 @@ function Common.getCamera()
 	return workspace and workspace.CurrentCamera
 end
 
-function Common.getCrosshairCenter(player)
-	local playerGui = player and player:FindFirstChild("PlayerGui")
-	local gui = playerGui and playerGui:FindFirstChild("CrosshairGUI")
-	local center = gui and gui:FindFirstChild("Center")
-
-	if center then
-		local ok, position = pcall(function()
-			local absolute = center.AbsolutePosition
-			local size = center.AbsoluteSize
-			return Vector2.new(absolute.X + size.X * 0.5, absolute.Y + size.Y * 0.5)
-		end)
-		if ok and position then
-			return position
-		end
-	end
-
+function Common.getCrosshairCenter()
 	local camera = Common.getCamera()
 	local viewport = camera and camera.ViewportSize or Vector2.new(1920, 1080)
-	local inset = 58
-	pcall(function()
-		local guiService = game:GetService("GuiService")
-		local value = guiService:GetGuiInset()
-		if value then
-			inset = value.Y or inset
-		end
-	end)
 
-	return Vector2.new(viewport.X * 0.5, viewport.Y * 0.5 - inset)
+	return Vector2.new(viewport.X * 0.5, viewport.Y * 0.5)
 end
 
 function Common.isVisible(targetPart, character, camera)
