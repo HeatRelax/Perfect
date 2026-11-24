@@ -579,7 +579,7 @@ function Core:createPlayerListOverlay()
 
 	local rows = {}
 	local rowHeight = 18
-	local maxListHeight = 180
+	local maxListHeight = 150
 
 	local function teamColor(player)
 		local team = player.Team
