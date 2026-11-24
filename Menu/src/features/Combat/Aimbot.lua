@@ -4,6 +4,12 @@ local DEFAULT_KEY = "E"
 local DEFAULT_FOV = 220
 local DEFAULT_SMOOTHNESS = 8
 local DEFAULT_DISTANCE = 600
+local DEFAULT_FOV_COLOR = Color3.fromRGB(34, 211, 238)
+local DEFAULT_FOV_THICKNESS = 1
+local DEFAULT_FOV_TRANSPARENCY = 0.4
+local DEFAULT_FOV_SIDES = 64
+local DEFAULT_FOV_FILL = false
+local DEFAULT_FOV_FILL_OPACITY = 0.15
 
 local function toKeyCode(value)
 	if typeof(value) == "EnumItem" then
@@ -40,6 +46,12 @@ function Aimbot.build(tab, menu, modules)
 	local predictionEnabled = false
 	local prediction = 0.12
 	local showFov = true
+	local fovColor = DEFAULT_FOV_COLOR
+	local fovThickness = DEFAULT_FOV_THICKNESS
+	local fovTransparency = DEFAULT_FOV_TRANSPARENCY
+	local fovSides = DEFAULT_FOV_SIDES
+	local fovFilled = DEFAULT_FOV_FILL
+	local fovFillOpacity = DEFAULT_FOV_FILL_OPACITY
 
 	local aimHeld = false
 	local aimToggled = false
@@ -76,6 +88,12 @@ function Aimbot.build(tab, menu, modules)
 		end
 
 		fovCircle:setRadius(fov)
+		fovCircle:setColor(fovColor)
+		fovCircle:setThickness(fovThickness)
+		fovCircle:setTransparency(fovTransparency)
+		fovCircle:setSides(fovSides)
+		fovCircle:setFilled(fovFilled)
+		fovCircle:setFillOpacity(fovFillOpacity)
 		fovCircle:setVisible(enabled and showFov)
 		if enabled and showFov then
 			fovCircle:setCenter(Common.getCrosshairCenter(player))
@@ -94,9 +112,12 @@ function Aimbot.build(tab, menu, modules)
 		fovCircle = Common.createFovCircle(menu, {
 			name = "MadCityAimbotFov",
 			radius = fov,
-			color = Color3.fromRGB(34, 211, 238),
-			thickness = 1,
-			transparency = 0.4,
+			color = fovColor,
+			thickness = fovThickness,
+			transparency = fovTransparency,
+			sides = fovSides,
+			filled = fovFilled,
+			fillOpacity = fovFillOpacity,
 		})
 	end
 
@@ -334,15 +355,91 @@ function Aimbot.build(tab, menu, modules)
 	aimSection:Slider({
 		Title = "FOV",
 		Desc = "Aim radius in pixels around the crosshair",
-		Step = 5,
+		Step = 1,
 		Value = {
-			Min = 25,
-			Max = 800,
+			Min = 10,
+			Max = 2000,
 			Default = DEFAULT_FOV,
 		},
 		Callback = function(value)
 			fov = value
 			updateCircle()
+		end,
+	})
+
+	aimSection:ColorPicker({
+		Title = "Circle Color",
+		Desc = "Color and transparency of the FOV circle",
+		Value = fovColor,
+		Transparency = fovTransparency,
+		Callback = function(color, transparency)
+			fovColor = color
+			fovTransparency = transparency
+			updateCircle()
+		end,
+	})
+
+	aimSection:Slider({
+		Title = "Circle Thickness",
+		Desc = "Outline width in pixels",
+		Step = 1,
+		Value = {
+			Min = 1,
+			Max = 10,
+			Default = DEFAULT_FOV_THICKNESS,
+		},
+		Callback = function(value)
+			fovThickness = value
+			if fovCircle then
+				fovCircle:setThickness(value)
+			end
+		end,
+	})
+
+	aimSection:Slider({
+		Title = "Circle Sides",
+		Desc = "Segments used to draw the circle",
+		Step = 4,
+		Value = {
+			Min = 8,
+			Max = 128,
+			Default = DEFAULT_FOV_SIDES,
+		},
+		Callback = function(value)
+			fovSides = value
+			if fovCircle then
+				fovCircle:setSides(value)
+			end
+		end,
+	})
+
+	aimSection:Toggle({
+		Title = "Circle Fill",
+		Desc = "Tint the inside of the FOV circle",
+		Value = DEFAULT_FOV_FILL,
+		Callback = function(state)
+			fovFilled = state
+			if fovCircle then
+				fovCircle:setFilled(state)
+			end
+		end,
+	})
+
+	aimSection:Slider({
+		Title = "Fill Opacity",
+		Desc = "How strongly the inside is tinted",
+		Step = 1,
+		Suffix = "%",
+		Value = {
+			Min = 5,
+			Max = 50,
+			Default = 15,
+		},
+		Callback = function(value)
+			fovFillOpacity = value / 100
+			if fovCircle then
+				fovCircle:setFillOpacity(fovFillOpacity)
+			end
 		end,
 	})
 

@@ -9,6 +9,16 @@ local SHOT_EVENTS = {
 	ShootRayGun = true,
 }
 
+local DEFAULT_KEY = "T"
+local DEFAULT_FOV = 300
+local DEFAULT_DISTANCE = 800
+local DEFAULT_FOV_COLOR = Color3.fromRGB(34, 211, 238)
+local DEFAULT_FOV_THICKNESS = 1
+local DEFAULT_FOV_TRANSPARENCY = 0.35
+local DEFAULT_FOV_SIDES = 64
+local DEFAULT_FOV_FILL = false
+local DEFAULT_FOV_FILL_OPACITY = 0.15
+
 local unpackArgs = table.unpack or unpack
 
 local function isVector3(value)
@@ -26,17 +36,28 @@ function SilentAim.build(tab, menu, modules)
 	local services = shared.services
 	local player = services.players.LocalPlayer
 	local runService = services.runService
+	local userInputService = services.userInputService
 	local replicatedStorage = services.replicatedStorage
 	local workspace = services.workspace
 
 	local enabled = false
-	local fov = 300
-	local maxDistance = 800
+	local fov = DEFAULT_FOV
+	local maxDistance = DEFAULT_DISTANCE
 	local partName = "Head"
 	local teamCheck = true
 	local wallCheck = true
 	local maxDamage = true
 	local showFov = true
+	local fovColor = DEFAULT_FOV_COLOR
+	local fovThickness = DEFAULT_FOV_THICKNESS
+	local fovTransparency = DEFAULT_FOV_TRANSPARENCY
+	local fovSides = DEFAULT_FOV_SIDES
+	local fovFilled = DEFAULT_FOV_FILL
+	local fovFillOpacity = DEFAULT_FOV_FILL_OPACITY
+	local aimKey = Enum.KeyCode[DEFAULT_KEY]
+	local lastKeybindChange = 0
+	local syncingToggle = false
+	local toggle
 
 	local currentTarget
 	local fovCircle
@@ -220,9 +241,12 @@ function SilentAim.build(tab, menu, modules)
 		fovCircle = Common.createFovCircle(menu, {
 			name = "MadCitySilentAimFov",
 			radius = fov,
-			color = Color3.fromRGB(34, 211, 238),
-			thickness = 1,
-			transparency = 0.35,
+			color = fovColor,
+			thickness = fovThickness,
+			transparency = fovTransparency,
+			sides = fovSides,
+			filled = fovFilled,
+			fillOpacity = fovFillOpacity,
 		})
 	end
 
@@ -273,6 +297,17 @@ function SilentAim.build(tab, menu, modules)
 		end
 	end
 
+	local function setToggle(state)
+		if not toggle or syncingToggle then
+			return
+		end
+		syncingToggle = true
+		pcall(function()
+			toggle:Set(state)
+		end)
+		syncingToggle = false
+	end
+
 	local function setEnabled(state)
 		if enabled == state then
 			return
@@ -284,7 +319,7 @@ function SilentAim.build(tab, menu, modules)
 			updateTarget()
 			startUpdates()
 			if not installHooks() then
-				notify("Silent Aim", "Hooks could not be installed. Try Reinstall Hooks.")
+				notify("Silent Aim", "Hooks could not be installed. Toggle Silent Aim off and on to retry.")
 			end
 		else
 			stopUpdates()
@@ -294,6 +329,8 @@ function SilentAim.build(tab, menu, modules)
 				fovCircle:setVisible(false)
 			end
 		end
+
+		setToggle(state)
 	end
 
 	local silentSection = tab:Section({
@@ -302,12 +339,32 @@ function SilentAim.build(tab, menu, modules)
 		Box = true,
 	})
 
-	silentSection:Toggle({
+	toggle = silentSection:Toggle({
 		Title = "Enabled",
 		Desc = "Hook WeaponCore and redirect shots",
 		Value = false,
 		Callback = function(state)
+			if syncingToggle then
+				return
+			end
 			setEnabled(state)
+		end,
+	})
+
+	silentSection:Keybind({
+		Title = "Toggle Key",
+		Desc = "Key that toggles silent aim",
+		Value = DEFAULT_KEY,
+		Callback = function(key)
+			if key == nil then
+				aimKey = nil
+			else
+				local keyCode = typeof(key) == "EnumItem" and key or Enum.KeyCode[key]
+				if keyCode then
+					aimKey = keyCode
+				end
+			end
+			lastKeybindChange = os.clock()
 		end,
 	})
 
@@ -316,16 +373,95 @@ function SilentAim.build(tab, menu, modules)
 	silentSection:Slider({
 		Title = "FOV",
 		Desc = "Target radius in pixels around the crosshair",
-		Step = 5,
+		Step = 1,
 		Value = {
-			Min = 50,
-			Max = 1000,
-			Default = 300,
+			Min = 10,
+			Max = 2000,
+			Default = DEFAULT_FOV,
 		},
 		Callback = function(value)
 			fov = value
 			if fovCircle then
 				fovCircle:setRadius(value)
+			end
+		end,
+	})
+
+	silentSection:ColorPicker({
+		Title = "Circle Color",
+		Desc = "Color and transparency of the FOV circle",
+		Value = fovColor,
+		Transparency = fovTransparency,
+		Callback = function(color, transparency)
+			fovColor = color
+			fovTransparency = transparency
+			if fovCircle then
+				fovCircle:setColor(color)
+				fovCircle:setTransparency(transparency)
+			end
+		end,
+	})
+
+	silentSection:Slider({
+		Title = "Circle Thickness",
+		Desc = "Outline width in pixels",
+		Step = 1,
+		Value = {
+			Min = 1,
+			Max = 10,
+			Default = DEFAULT_FOV_THICKNESS,
+		},
+		Callback = function(value)
+			fovThickness = value
+			if fovCircle then
+				fovCircle:setThickness(value)
+			end
+		end,
+	})
+
+	silentSection:Slider({
+		Title = "Circle Sides",
+		Desc = "Segments used to draw the circle",
+		Step = 4,
+		Value = {
+			Min = 8,
+			Max = 128,
+			Default = DEFAULT_FOV_SIDES,
+		},
+		Callback = function(value)
+			fovSides = value
+			if fovCircle then
+				fovCircle:setSides(value)
+			end
+		end,
+	})
+
+	silentSection:Toggle({
+		Title = "Circle Fill",
+		Desc = "Tint the inside of the FOV circle",
+		Value = DEFAULT_FOV_FILL,
+		Callback = function(state)
+			fovFilled = state
+			if fovCircle then
+				fovCircle:setFilled(state)
+			end
+		end,
+	})
+
+	silentSection:Slider({
+		Title = "Fill Opacity",
+		Desc = "How strongly the inside is tinted",
+		Step = 1,
+		Suffix = "%",
+		Value = {
+			Min = 5,
+			Max = 50,
+			Default = 15,
+		},
+		Callback = function(value)
+			fovFillOpacity = value / 100
+			if fovCircle then
+				fovCircle:setFillOpacity(fovFillOpacity)
 			end
 		end,
 	})
@@ -337,7 +473,7 @@ function SilentAim.build(tab, menu, modules)
 		Value = {
 			Min = 50,
 			Max = 2000,
-			Default = 800,
+			Default = DEFAULT_DISTANCE,
 		},
 		Callback = function(value)
 			maxDistance = value
@@ -397,26 +533,18 @@ function SilentAim.build(tab, menu, modules)
 		end,
 	})
 
-	silentSection:Space()
-
-	silentSection:Button({
-		Title = "Reinstall Hooks",
-		Desc = "Re-hook WeaponCore after a reset or respawn",
-		Icon = "lucide:refresh-cw",
-		Callback = function()
-			if not enabled then
-				notify("Silent Aim", "Enable silent aim before reinstalling hooks.")
-				return
-			end
-
-			local ok = installHooks()
-			if ok then
-				notify("Silent Aim", "Hooks reinstalled.")
-			else
-				notify("Silent Aim", "Hooks could not be installed.")
-			end
-		end,
-	})
+	menu:addConnection(userInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then
+			return
+		end
+		if not aimKey or (input.KeyCode ~= aimKey and input.UserInputType ~= aimKey) then
+			return
+		end
+		if os.clock() - lastKeybindChange < 0.25 then
+			return
+		end
+		setEnabled(not enabled)
+	end))
 
 	menu:addCleanup(function()
 		setEnabled(false)

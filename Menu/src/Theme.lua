@@ -1,46 +1,47 @@
 local Theme = {}
 
-Theme.Name = "Mad City"
+Theme.Name = "Midnight"
 
 local function rgb(r, g, b)
 	return Color3.fromRGB(r, g, b)
 end
 
 Theme.colors = {
-	accent = rgb(46, 230, 107),
+	accent = rgb(103, 89, 179),
 	accentAlt = rgb(34, 211, 238),
 	combat = rgb(251, 113, 133),
 	aim = rgb(34, 211, 238),
 	warning = rgb(251, 191, 36),
 	danger = rgb(248, 113, 113),
-	text = rgb(245, 249, 255),
-	muted = rgb(147, 166, 188),
+	text = rgb(235, 235, 235),
+	muted = rgb(145, 145, 145),
 }
 
--- Every color key Tokyo UI reads. Applied after library:init() because
--- Tokyo defines SetTheme inside init and starts with an empty theme table.
+-- Tokyo's built-in Midnight palette. The menu applies this on startup and
+-- selects the matching Settings preset, so Midnight is the default theme.
+-- Every color key Tokyo UI reads is listed here.
 Theme.tokyo = {
 	["Accent"] = Theme.colors.accent,
-	["Background"] = rgb(7, 12, 19),
+	["Background"] = rgb(22, 22, 31),
 	["Border"] = rgb(0, 0, 0),
-	["Border 1"] = rgb(34, 50, 71),
-	["Border 2"] = rgb(12, 22, 33),
-	["Border 3"] = rgb(5, 9, 15),
+	["Border 1"] = rgb(50, 50, 50),
+	["Border 2"] = rgb(24, 25, 37),
+	["Border 3"] = rgb(10, 10, 10),
 	["Primary Text"] = Theme.colors.text,
-	["Group Background"] = rgb(10, 17, 26),
-	["Selected Tab Background"] = rgb(12, 26, 38),
-	["Unselected Tab Background"] = rgb(9, 14, 21),
-	["Selected Tab Text"] = rgb(245, 249, 255),
-	["Unselected Tab Text"] = rgb(147, 166, 188),
-	["Section Background"] = rgb(12, 22, 33),
-	["Option Text 1"] = rgb(245, 249, 255),
-	["Option Text 2"] = rgb(175, 194, 214),
-	["Option Text 3"] = rgb(126, 144, 166),
-	["Option Border 1"] = rgb(34, 50, 71),
-	["Option Border 2"] = rgb(5, 9, 15),
-	["Option Background"] = rgb(15, 27, 40),
-	["Risky Text"] = rgb(248, 113, 113),
-	["Risky Text Enabled"] = rgb(252, 165, 165),
+	["Group Background"] = rgb(24, 25, 37),
+	["Selected Tab Background"] = rgb(24, 25, 37),
+	["Unselected Tab Background"] = rgb(22, 22, 31),
+	["Selected Tab Text"] = rgb(245, 245, 245),
+	["Unselected Tab Text"] = rgb(145, 145, 145),
+	["Section Background"] = rgb(22, 22, 31),
+	["Option Text 1"] = rgb(245, 245, 245),
+	["Option Text 2"] = rgb(195, 195, 195),
+	["Option Text 3"] = rgb(145, 145, 145),
+	["Option Border 1"] = rgb(50, 50, 50),
+	["Option Border 2"] = rgb(0, 0, 0),
+	["Option Background"] = rgb(24, 25, 37),
+	["Risky Text"] = rgb(175, 21, 21),
+	["Risky Text Enabled"] = rgb(255, 41, 41),
 }
 
 local function registerPreset(library)

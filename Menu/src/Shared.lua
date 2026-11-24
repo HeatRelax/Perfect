@@ -16,7 +16,7 @@ Shared.services = {
 }
 
 Shared.settings = {
-	version = "2.5.4",
+	version = "2.5.5",
 
 	-- Main.lua overwrites this with the URL it loaded from.
 	baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/",

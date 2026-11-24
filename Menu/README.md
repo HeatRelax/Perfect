@@ -10,7 +10,7 @@ folder can be edited independently.
 Main.lua                  entry point (the executor only loads this)
 src/
   Shared.lua              services, window settings, feature order
-  Theme.lua               Tokyo UI "Mad City" palette
+  Theme.lua               Tokyo UI Midnight palette
   Library.lua             Tokyo UI loader + source patches
   Menu.lua                Tokyo adapter (tabs, sections, controls, cleanup)
   Signal.lua              standalone GoodSignal used by Tokyo UI
@@ -46,7 +46,7 @@ paragraph text. The empty Player, Teleport, and Misc scaffolds stay out of
 
 ## Interface
 
-- Dark navy surfaces with the Mad City green/cyan accent palette.
+- Midnight surfaces with the purple accent palette, selected by default.
 - Two-column Tokyo sections with toggles, sliders, dropdowns, keybinds, and buttons.
 - Press `RightShift` to show or hide the menu.
 - A short notification confirms the version when the menu loads.
@@ -74,7 +74,10 @@ The Combat tab has two features.
 Moves the camera onto the nearest target inside the FOV circle.
 
 - **Enabled** toggle, **Activation** (`Hold`, `Toggle`, `Always`), and **Aim Key**.
-- **Smoothness**, **FOV**, and **Max Distance** sliders.
+- **Smoothness**, **FOV** (10–2000 px, 1 px steps), and **Max Distance** sliders.
+- **Circle Color** picks the FOV outline color and transparency, with
+  **Circle Thickness**, **Circle Sides**, **Circle Fill**, and **Fill Opacity**
+  controls for the ring.
 - **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
 - **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
 - The **Prediction Time** slider stays locked until **Prediction** is enabled.
@@ -85,10 +88,11 @@ Moves the camera onto the nearest target inside the FOV circle.
 
 Re-aims shots without moving the camera or your input.
 
-- **Enabled** toggle, **FOV** and **Max Distance** sliders.
+- **Enabled** toggle, **Toggle Key** (default `T`), **FOV** (10–2000 px,
+  1 px steps), and **Max Distance** sliders.
+- **Circle Color**, **Circle Thickness**, **Circle Sides**, **Circle Fill**, and
+  **Fill Opacity** customize the FOV ring.
 - **Target Part**, **Team Check**, **Wall Check**, **Max Damage**, **Show FOV**.
-- **Reinstall Hooks** re-hooks WeaponCore after a respawn or script reset and
-  reports the result in a notification.
 - Hooks `WeaponCore.ShootGun`, `ShootShotgun`, `ShootTazer`, and `ShootRayGun`,
   replacing the aim point and spread, and setting damage to `1e9` when
   **Max Damage** is on. If WeaponCore hooks cannot be installed, the remote
@@ -223,9 +227,9 @@ metadata for future UIs; Tokyo UI renders text-only tabs.
 Edit the Tokyo palette in `src/Theme.lua`. Every key Tokyo UI reads is listed
 there: `Accent`, `Background`, `Primary Text`, `Option Background`,
 `Section Background`, and the rest of the palette. The palette is registered as
-the **Mad City** preset in the Settings tab, so users can switch to another
-preset and back. Window size, title, and the toggle key live in
-`src/Shared.lua`.
+the **Midnight** preset in the Settings tab and selected by default, so users
+can switch to another preset and back. Window size, title, and the toggle key
+live in `src/Shared.lua`.
 
 ## Tokyo UI loading
 
@@ -240,7 +244,7 @@ patches three things before running it:
 After `library:init()`, the theme is applied with `library:SetTheme(...)`, the
 toggle key is set to `RightShift`, and the empty Tokyo keybind indicator is
 hidden. `Menu:createSettingsTab()` then calls Tokyo's
-`library:CreateSettingsTab(window)`, restores the Mad City palette (Tokyo
+`library:CreateSettingsTab(window)`, restores the Midnight palette (Tokyo
 selects its Default preset while building), and routes the settings Unload
 button through the menu cleanup. Tokyo UI requires an executor with `Drawing`,
 `makefolder`, `listfiles`, `isfile`, `readfile`, and `writefile`.

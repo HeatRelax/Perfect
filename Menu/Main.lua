@@ -130,7 +130,7 @@ for _, tabData in ipairs(tabs) do
 end
 
 -- Tokyo's settings tab selects the Default preset while it builds, so apply
--- the Mad City palette again and show it as the active preset.
+-- the Midnight palette again and show it as the active preset.
 local SettingsTab = menu:createSettingsTab()
 Theme.apply(library)
 

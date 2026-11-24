@@ -253,9 +253,14 @@ function Common.createFovCircle(menu, options)
 	local transparency = options.transparency or 0.4
 	local sides = options.sides or 64
 	local name = options.name or "MadCityFov"
+	local filled = options.filled == true
+	local fillOpacity = options.fillOpacity or 0.15
 
 	local handle = {
 		destroyed = false,
+		visible = false,
+		filled = filled,
+		fillOpacity = fillOpacity,
 	}
 
 	local function registerCleanup()
@@ -272,6 +277,14 @@ function Common.createFovCircle(menu, options)
 		end)
 
 		if ok and circle then
+			local fill
+			local okFill, fillCircle = pcall(function()
+				return Drawing.new("Circle")
+			end)
+			if okFill and fillCircle then
+				fill = fillCircle
+			end
+
 			pcall(function()
 				circle.Color = color
 				circle.Thickness = thickness
@@ -281,7 +294,22 @@ function Common.createFovCircle(menu, options)
 				circle.Visible = false
 				circle.Position = Vector2.new(0, 0)
 				circle.Radius = radius
+				circle.ZIndex = 2
 			end)
+
+			if fill then
+				pcall(function()
+					fill.Color = color
+					fill.Thickness = 1
+					fill.Transparency = 1 - fillOpacity
+					fill.NumSides = sides
+					fill.Filled = true
+					fill.Visible = false
+					fill.Position = Vector2.new(0, 0)
+					fill.Radius = radius
+					fill.ZIndex = 1
+				end)
+			end
 
 			function handle:setRadius(value)
 				if self.destroyed then
@@ -290,6 +318,11 @@ function Common.createFovCircle(menu, options)
 				pcall(function()
 					circle.Radius = value
 				end)
+				if fill then
+					pcall(function()
+						fill.Radius = value
+					end)
+				end
 			end
 
 			function handle:setCenter(center)
@@ -299,15 +332,97 @@ function Common.createFovCircle(menu, options)
 				pcall(function()
 					circle.Position = center
 				end)
+				if fill then
+					pcall(function()
+						fill.Position = center
+					end)
+				end
 			end
 
 			function handle:setVisible(visible)
 				if self.destroyed then
 					return
 				end
+				self.visible = visible == true
 				pcall(function()
-					circle.Visible = visible
+					circle.Visible = self.visible
 				end)
+				if fill then
+					pcall(function()
+						fill.Visible = self.visible and self.filled
+					end)
+				end
+			end
+
+			function handle:setColor(value)
+				if self.destroyed then
+					return
+				end
+				pcall(function()
+					circle.Color = value
+				end)
+				if fill then
+					pcall(function()
+						fill.Color = value
+					end)
+				end
+			end
+
+			function handle:setThickness(value)
+				if self.destroyed then
+					return
+				end
+				pcall(function()
+					circle.Thickness = value
+				end)
+			end
+
+			function handle:setTransparency(value)
+				if self.destroyed then
+					return
+				end
+				pcall(function()
+					circle.Transparency = value
+				end)
+			end
+
+			function handle:setSides(value)
+				if self.destroyed then
+					return
+				end
+				local count = math.max(3, math.floor(tonumber(value) or 64))
+				pcall(function()
+					circle.NumSides = count
+				end)
+				if fill then
+					pcall(function()
+						fill.NumSides = count
+					end)
+				end
+			end
+
+			function handle:setFilled(value)
+				if self.destroyed then
+					return
+				end
+				self.filled = value == true
+				if fill then
+					pcall(function()
+						fill.Visible = self.visible and self.filled
+					end)
+				end
+			end
+
+			function handle:setFillOpacity(value)
+				if self.destroyed then
+					return
+				end
+				self.fillOpacity = math.max(0, math.min(1, tonumber(value) or 0.15))
+				if fill then
+					pcall(function()
+						fill.Transparency = 1 - self.fillOpacity
+					end)
+				end
 			end
 
 			function handle:destroy()
@@ -321,6 +436,14 @@ function Common.createFovCircle(menu, options)
 				pcall(function()
 					circle:Destroy()
 				end)
+				if fill then
+					pcall(function()
+						fill:Remove()
+					end)
+					pcall(function()
+						fill:Destroy()
+					end)
+				end
 			end
 
 			registerCleanup()
@@ -351,11 +474,13 @@ function Common.createFovCircle(menu, options)
 		screenGui.IgnoreGuiInset = true
 		screenGui.ResetOnSpawn = false
 		screenGui.DisplayOrder = 999
+		screenGui.Enabled = false
 
 		local frame = Instance.new("Frame")
 		frame.Name = "Circle"
 		frame.AnchorPoint = Vector2.new(0.5, 0.5)
-		frame.BackgroundTransparency = 1
+		frame.BackgroundColor3 = color
+		frame.BackgroundTransparency = filled and (1 - fillOpacity) or 1
 		frame.BorderSizePixel = 0
 		frame.Size = UDim2.fromOffset(radius * 2, radius * 2)
 		frame.Position = UDim2.fromOffset(0, 0)
@@ -376,6 +501,7 @@ function Common.createFovCircle(menu, options)
 		return {
 			screenGui = screenGui,
 			frame = frame,
+			stroke = stroke,
 		}
 	end)
 
@@ -405,9 +531,64 @@ function Common.createFovCircle(menu, options)
 		if self.destroyed or not gui.screenGui then
 			return
 		end
+		self.visible = visible == true
 		pcall(function()
-			gui.screenGui.Enabled = visible
+			gui.screenGui.Enabled = self.visible
 		end)
+	end
+
+	function handle:setColor(value)
+		if self.destroyed then
+			return
+		end
+		pcall(function()
+			gui.stroke.Color = value
+			gui.frame.BackgroundColor3 = value
+		end)
+	end
+
+	function handle:setThickness(value)
+		if self.destroyed then
+			return
+		end
+		pcall(function()
+			gui.stroke.Thickness = value
+		end)
+	end
+
+	function handle:setTransparency(value)
+		if self.destroyed then
+			return
+		end
+		pcall(function()
+			gui.stroke.Transparency = value
+		end)
+	end
+
+	function handle:setSides(value)
+		-- The GUI fallback is a rounded frame; sides only apply to Drawing.
+	end
+
+	function handle:setFilled(value)
+		if self.destroyed then
+			return
+		end
+		self.filled = value == true
+		pcall(function()
+			gui.frame.BackgroundTransparency = self.filled and (1 - self.fillOpacity) or 1
+		end)
+	end
+
+	function handle:setFillOpacity(value)
+		if self.destroyed then
+			return
+		end
+		self.fillOpacity = math.max(0, math.min(1, tonumber(value) or 0.15))
+		if self.filled then
+			pcall(function()
+				gui.frame.BackgroundTransparency = 1 - self.fillOpacity
+			end)
+		end
 	end
 
 	function handle:destroy()
