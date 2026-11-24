@@ -21,6 +21,10 @@ The overlay shows the live cash, level, XP, and current step. Cash is expanded
 and comma-formatted, so both `$10342575` and `$10M` display as an exact amount
 such as `$10,342,575`.
 
+Below the stats panel, a player list shows every player in the server. Each
+name is colored with that player's team color; players without a team appear
+gray. The list updates automatically as players join, leave, or change teams.
+
 ## FPS boost
 
 The script enables the max-FPS setup automatically at startup; there is no menu

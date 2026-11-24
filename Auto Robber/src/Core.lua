@@ -501,6 +501,172 @@ function Core:waitForGame()
 	task.wait(0.3)
 end
 
+function Core:createPlayerListOverlay()
+	local shared = self.shared
+	local coreGui = shared.services.coreGui
+	local players = self.services.players
+
+	local existing = coreGui:FindFirstChild("HeistPlayerListOverlay")
+	if existing then
+		existing:Destroy()
+	end
+
+	local playerGui = shared.getPlayer():FindFirstChild("PlayerGui")
+	if playerGui and playerGui:FindFirstChild("HeistPlayerListOverlay") then
+		playerGui.HeistPlayerListOverlay:Destroy()
+	end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "HeistPlayerListOverlay"
+	gui.DisplayOrder = 2147483647
+	attachOverlay(shared, gui)
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.Position = UDim2.new(0, 12, 0.5, 64)
+	panel.Size = UDim2.new(0, 235, 0, 0)
+	panel.AutomaticSize = Enum.AutomaticSize.Y
+	panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+	panel.BackgroundTransparency = 0.2
+	panel.BorderSizePixel = 0
+	panel.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = panel
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 8)
+	padding.PaddingBottom = UDim.new(0, 8)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.Parent = panel
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 3)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = panel
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.LayoutOrder = 1
+	title.Size = UDim2.new(1, 0, 0, 18)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 13
+	title.TextColor3 = Color3.fromRGB(220, 225, 235)
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Text = "Players (0)"
+	title.Parent = panel
+
+	local list = Instance.new("ScrollingFrame")
+	list.Name = "List"
+	list.LayoutOrder = 2
+	list.Size = UDim2.new(1, 0, 0, 0)
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	list.CanvasSize = UDim2.new(0, 0, 0, 0)
+	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
+	list.ScrollBarThickness = 4
+	list.ScrollBarImageColor3 = Color3.fromRGB(90, 95, 110)
+	list.ScrollingDirection = Enum.ScrollingDirection.Y
+	list.Parent = panel
+
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 2)
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Parent = list
+
+	local rows = {}
+	local rowHeight = 18
+	local maxListHeight = 180
+
+	local function teamColor(player)
+		local team = player.Team
+		if team then
+			local ok, brickColor = pcall(function()
+				return team.TeamColor
+			end)
+			if ok and brickColor then
+				local okColor, color = pcall(function()
+					return brickColor.Color
+				end)
+				if okColor and color then
+					return color
+				end
+			end
+		end
+		return Color3.fromRGB(200, 205, 215)
+	end
+
+	local function ensureRow(player)
+		local row = rows[player]
+		if row and row.Parent then
+			return row
+		end
+
+		row = Instance.new("TextLabel")
+		row.Name = "Player"
+		row.Size = UDim2.new(1, -6, 0, rowHeight)
+		row.BackgroundTransparency = 1
+		row.Font = Enum.Font.GothamMedium
+		row.TextSize = 13
+		row.TextXAlignment = Enum.TextXAlignment.Left
+		row.TextTruncate = Enum.TextTruncate.AtEnd
+		row.Text = player.Name
+		row.TextColor3 = teamColor(player)
+		row.Parent = list
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+		stroke.Transparency = 0.8
+		stroke.Thickness = 1
+		stroke.Parent = row
+
+		rows[player] = row
+		return row
+	end
+
+	local function refresh()
+		local listPlayers = players:GetPlayers()
+		table.sort(listPlayers, function(a, b)
+			return string.lower(a.Name) < string.lower(b.Name)
+		end)
+
+		local seen = {}
+		for index, player in ipairs(listPlayers) do
+			seen[player] = true
+			local row = ensureRow(player)
+			row.LayoutOrder = index
+			row.Text = player.Name
+			row.TextColor3 = teamColor(player)
+		end
+
+		for player, row in pairs(rows) do
+			if not seen[player] then
+				row:Destroy()
+				rows[player] = nil
+			end
+		end
+
+		title.Text = "Players (" .. #listPlayers .. ")"
+		local height = math.min(#listPlayers * (rowHeight + 2), maxListHeight)
+		list.Size = UDim2.new(1, 0, 0, height)
+	end
+
+	refresh()
+
+	task.spawn(function()
+		while true do
+			if not gui.Parent then
+				attachOverlay(shared, gui)
+			end
+			refresh()
+			task.wait(0.5)
+		end
+	end)
+end
+
 function Core:createOverlay()
 	local shared = self.shared
 	local coreGui = shared.services.coreGui
@@ -587,6 +753,11 @@ function Core:createOverlay()
 			task.wait(0.25)
 		end
 	end)
+
+	local playerListOk, playerListErr = pcall(self.createPlayerListOverlay, self)
+	if not playerListOk then
+		warn("[Auto Robber] Player list overlay failed: " .. tostring(playerListErr))
+	end
 
 	if self.performance and type(self.performance.attach) == "function" then
 		local ok, err = pcall(self.performance.attach, self)
