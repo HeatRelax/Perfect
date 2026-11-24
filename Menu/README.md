@@ -116,10 +116,11 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
 - Box and tracer colors follow the player's team category, and the health bar
   fades from red to green as health fills. Turn **Team Colors** off to use a
   custom **ESP Color** instead.
-- The box fits the player's body parts, including the arms, legs, head,
-  hands, and feet, so it wraps the character at any range. Accessories and
-  held tools are excluded so hats, pets, and weapons do not stretch the box.
-  Every position and size is rounded to whole pixels for crisp rendering.
+- The box projects every body part to the screen and hugs the visible
+  silhouette, including the arms, legs, head, hands, and feet, so it wraps the
+  character at any angle and range. Accessories and held tools are excluded
+  so hats, pets, and weapons do not stretch the box. Every position and size
+  is rounded to whole pixels for crisp rendering.
 
 Drawings are pooled per player and removed on unload or when a player leaves.
 

@@ -335,8 +335,8 @@ function Section:Toggle(data)
 		end,
 	})
 
-	if data.Value == true then
-		option:SetState(true, true)
+	if type(data.Value) == "boolean" then
+		option:SetState(data.Value, true)
 	end
 
 	return self.menu:wrapOption(self, option, "toggle")

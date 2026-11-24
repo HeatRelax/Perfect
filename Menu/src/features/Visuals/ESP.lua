@@ -410,64 +410,34 @@ function ESP.build(tab, menu)
 			entry.partsUpdated = now
 		end
 
-		local minWorldX, minWorldY, minWorldZ = math.huge, math.huge, math.huge
-		local maxWorldX, maxWorldY, maxWorldZ = -math.huge, -math.huge, -math.huge
-		local hasParts = false
+		-- Project every body part's corners and keep the union. A world-space
+		-- AABB grows with the character's full width even when the camera sees
+		-- them side-on, so the box would float far outside the visible body.
+		local minScreenX, minScreenY = math.huge, math.huge
+		local maxScreenX, maxScreenY = -math.huge, -math.huge
+		local hasScreen = false
 
 		for _, part in ipairs(entry.parts) do
 			if part.Parent and part.Transparency < 1 then
 				local partCFrame = part.CFrame
 				local partSize = part.Size
 				local halfX, halfY, halfZ = partSize.X * 0.5, partSize.Y * 0.5, partSize.Z * 0.5
-				local right, up, look = partCFrame.RightVector, partCFrame.UpVector, partCFrame.LookVector
-				local extentX = math.abs(right.X) * halfX + math.abs(up.X) * halfY + math.abs(look.X) * halfZ
-				local extentY = math.abs(right.Y) * halfX + math.abs(up.Y) * halfY + math.abs(look.Y) * halfZ
-				local extentZ = math.abs(right.Z) * halfX + math.abs(up.Z) * halfY + math.abs(look.Z) * halfZ
-				local position = partCFrame.Position
 
-				minWorldX = math.min(minWorldX, position.X - extentX)
-				minWorldY = math.min(minWorldY, position.Y - extentY)
-				minWorldZ = math.min(minWorldZ, position.Z - extentZ)
-				maxWorldX = math.max(maxWorldX, position.X + extentX)
-				maxWorldY = math.max(maxWorldY, position.Y + extentY)
-				maxWorldZ = math.max(maxWorldZ, position.Z + extentZ)
-				hasParts = true
-			end
-		end
-
-		if not hasParts then
-			return nil
-		end
-
-		local worldCenterX = (minWorldX + maxWorldX) * 0.5
-		local worldCenterY = (minWorldY + maxWorldY) * 0.5
-		local worldCenterZ = (minWorldZ + maxWorldZ) * 0.5
-		local halfWorldX = (maxWorldX - minWorldX) * 0.5
-		local halfWorldY = (maxWorldY - minWorldY) * 0.5
-		local halfWorldZ = (maxWorldZ - minWorldZ) * 0.5
-
-		local centerScreen = camera:WorldToViewportPoint(Vector3.new(worldCenterX, worldCenterY, worldCenterZ))
-		if centerScreen.Z <= 0 then
-			return nil
-		end
-
-		local minScreenX, minScreenY = math.huge, math.huge
-		local maxScreenX, maxScreenY = -math.huge, -math.huge
-		local hasScreen = false
-
-		for _, offset in ipairs(SCREEN_CORNERS) do
-			local worldPoint = Vector3.new(
-				worldCenterX + offset.X * halfWorldX,
-				worldCenterY + offset.Y * halfWorldY,
-				worldCenterZ + offset.Z * halfWorldZ
-			)
-			local screen = camera:WorldToViewportPoint(worldPoint)
-			if screen.Z > 0 then
-				minScreenX = math.min(minScreenX, screen.X)
-				minScreenY = math.min(minScreenY, screen.Y)
-				maxScreenX = math.max(maxScreenX, screen.X)
-				maxScreenY = math.max(maxScreenY, screen.Y)
-				hasScreen = true
+				for _, offset in ipairs(SCREEN_CORNERS) do
+					local worldPoint = partCFrame * Vector3.new(
+						offset.X * halfX,
+						offset.Y * halfY,
+						offset.Z * halfZ
+					)
+					local screen = camera:WorldToViewportPoint(worldPoint)
+					if screen.Z > 0 then
+						minScreenX = math.min(minScreenX, screen.X)
+						minScreenY = math.min(minScreenY, screen.Y)
+						maxScreenX = math.max(maxScreenX, screen.X)
+						maxScreenY = math.max(maxScreenY, screen.Y)
+						hasScreen = true
+					end
+				end
 			end
 		end
 
