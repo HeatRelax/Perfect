@@ -100,28 +100,26 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
 
 - **Enabled** toggle.
 - **Box**, **Name**, **Health**, **Distance**, and **Tracer** toggles.
-- **Appearance**: **Box Style** (Full, Corners, 3D), **Box Thickness**,
-  **Box Fill** and **Fill Opacity**, **Text Size**, **Text Outline** and
-  **Outline Color**, **Team Colors**, **ESP Color**, **Name Mode** (username,
-  display name, or both), **Health Side**, and **Tracer Origin** (bottom,
-  center, or mouse).
+- **Appearance**: **Box Style** (Full, Corners, 3D), **Box Fill** and
+  **Fill Opacity**, **Text Outline** and **Outline Color**, **Team Colors**,
+  **ESP Color**, **Name Mode** (username, display name, or both),
+  **Health Side**, and **Tracer Origin** (bottom, center, or mouse).
 - **Info Flags** sit beside the box: **Cash**, **Rank**, **Bounty**, and
   **Weapon** (the held tool name, shown without a label). Flags can show
   labels, move to the left side, and use their own text size.
-- **Scaling** controls how the overlay resizes: **Scale With Distance**
-  shrinks everything as players move away, while **Min Height** and
-  **Max Height** set the box size range in pixels.
+- **Scaling** controls how the details resize: **Scale With Distance** scales
+  text, flags, and gaps with the box, while **Min Detail Height** and
+  **Max Detail Height** clamp that scale in pixels.
 - **Filters**: **Team Check** hides players in the same Mad City category as
   you (law, criminal, or wanted); **Visible Only** raycasts to the player and
   skips anyone behind a wall; **Max Distance** caps the draw distance.
 - Box and tracer colors follow the player's team category, and the health bar
   fades from red to green as health fills. Turn **Team Colors** off to use a
   custom **ESP Color** instead.
-- The box, text, health bar, flags, gaps, and offsets all share one
-  distance-based scale, so the whole overlay shrinks together instead of
-  leaving oversized text behind. The box defaults to a 24-90 pixel height
-  range, and every position and size is rounded to whole pixels for crisp
-  rendering.
+- The box fits the player's body parts, including the arms, legs, head,
+  hands, and feet, so it wraps the character at any range. Accessories and
+  held tools are excluded so hats, pets, and weapons do not stretch the box.
+  Every position and size is rounded to whole pixels for crisp rendering.
 
 Drawings are pooled per player and removed on unload or when a player leaves.
 

@@ -3,7 +3,6 @@ local ESP = {}
 local DEFAULT_MAX_DISTANCE = 1000
 local DEFAULT_TEXT_SIZE = 14
 local DEFAULT_FLAG_SIZE = 12
-local BOX_WIDTH_RATIO = 0.55
 local HEALTH_BAR_WIDTH = 4
 local HEALTH_BAR_GAP = 3
 local FLAG_GAP = 6
@@ -20,6 +19,19 @@ local MIN_BOX_HEIGHT_LIMIT = 12
 local MAX_BOX_HEIGHT_LIMIT = 120
 local NAME_OFFSET = 4
 local DISTANCE_OFFSET = 4
+local BODY_PADDING = 1
+local PART_REFRESH_INTERVAL = 0.5
+
+local SCREEN_CORNERS = {
+	Vector3.new(-1, -1, -1),
+	Vector3.new(-1, -1, 1),
+	Vector3.new(-1, 1, -1),
+	Vector3.new(-1, 1, 1),
+	Vector3.new(1, -1, -1),
+	Vector3.new(1, -1, 1),
+	Vector3.new(1, 1, -1),
+	Vector3.new(1, 1, 1),
+}
 
 local TEAM_CATEGORIES = {
 	Police = "law",
@@ -287,6 +299,8 @@ local function destroyEntry(entry)
 	entry.drawings.corners = {}
 	entry.drawings.connectors = {}
 	entry.drawings.flags = {}
+	entry.parts = nil
+	entry.partsCharacter = nil
 	entry.visible = false
 end
 
@@ -313,10 +327,8 @@ function ESP.build(tab, menu)
 	local maxBoxHeight = DEFAULT_MAX_BOX_HEIGHT
 
 	local boxStyle = "Full"
-	local boxThickness = 1
 	local boxFill = false
 	local fillOpacity = 0.15
-	local textSize = DEFAULT_TEXT_SIZE
 	local textOutline = true
 	local outlineColor = Color3.fromRGB(0, 0, 0)
 	local teamColors = true
@@ -379,6 +391,91 @@ function ESP.build(tab, menu)
 		end
 
 		return nil, nil
+	end
+
+	local function getScreenBodyBounds(character, entry, camera, now)
+		if entry.partsCharacter ~= character
+			or not entry.parts
+			or now - (entry.partsUpdated or 0) > PART_REFRESH_INTERVAL then
+			local parts = {}
+			for _, descendant in ipairs(character:GetDescendants()) do
+				if descendant:IsA("BasePart")
+					and not descendant:FindFirstAncestorOfClass("Tool")
+					and not descendant:FindFirstAncestorOfClass("Accessory") then
+					parts[#parts + 1] = descendant
+				end
+			end
+			entry.parts = parts
+			entry.partsCharacter = character
+			entry.partsUpdated = now
+		end
+
+		local minWorldX, minWorldY, minWorldZ = math.huge, math.huge, math.huge
+		local maxWorldX, maxWorldY, maxWorldZ = -math.huge, -math.huge, -math.huge
+		local hasParts = false
+
+		for _, part in ipairs(entry.parts) do
+			if part.Parent and part.Transparency < 1 then
+				local partCFrame = part.CFrame
+				local partSize = part.Size
+				local halfX, halfY, halfZ = partSize.X * 0.5, partSize.Y * 0.5, partSize.Z * 0.5
+				local right, up, look = partCFrame.RightVector, partCFrame.UpVector, partCFrame.LookVector
+				local extentX = math.abs(right.X) * halfX + math.abs(up.X) * halfY + math.abs(look.X) * halfZ
+				local extentY = math.abs(right.Y) * halfX + math.abs(up.Y) * halfY + math.abs(look.Y) * halfZ
+				local extentZ = math.abs(right.Z) * halfX + math.abs(up.Z) * halfY + math.abs(look.Z) * halfZ
+				local position = partCFrame.Position
+
+				minWorldX = math.min(minWorldX, position.X - extentX)
+				minWorldY = math.min(minWorldY, position.Y - extentY)
+				minWorldZ = math.min(minWorldZ, position.Z - extentZ)
+				maxWorldX = math.max(maxWorldX, position.X + extentX)
+				maxWorldY = math.max(maxWorldY, position.Y + extentY)
+				maxWorldZ = math.max(maxWorldZ, position.Z + extentZ)
+				hasParts = true
+			end
+		end
+
+		if not hasParts then
+			return nil
+		end
+
+		local worldCenterX = (minWorldX + maxWorldX) * 0.5
+		local worldCenterY = (minWorldY + maxWorldY) * 0.5
+		local worldCenterZ = (minWorldZ + maxWorldZ) * 0.5
+		local halfWorldX = (maxWorldX - minWorldX) * 0.5
+		local halfWorldY = (maxWorldY - minWorldY) * 0.5
+		local halfWorldZ = (maxWorldZ - minWorldZ) * 0.5
+
+		local centerScreen = camera:WorldToViewportPoint(Vector3.new(worldCenterX, worldCenterY, worldCenterZ))
+		if centerScreen.Z <= 0 then
+			return nil
+		end
+
+		local minScreenX, minScreenY = math.huge, math.huge
+		local maxScreenX, maxScreenY = -math.huge, -math.huge
+		local hasScreen = false
+
+		for _, offset in ipairs(SCREEN_CORNERS) do
+			local worldPoint = Vector3.new(
+				worldCenterX + offset.X * halfWorldX,
+				worldCenterY + offset.Y * halfWorldY,
+				worldCenterZ + offset.Z * halfWorldZ
+			)
+			local screen = camera:WorldToViewportPoint(worldPoint)
+			if screen.Z > 0 then
+				minScreenX = math.min(minScreenX, screen.X)
+				minScreenY = math.min(minScreenY, screen.Y)
+				maxScreenX = math.max(maxScreenX, screen.X)
+				maxScreenY = math.max(maxScreenY, screen.Y)
+				hasScreen = true
+			end
+		end
+
+		if not hasScreen then
+			return nil
+		end
+
+		return minScreenX, minScreenY, maxScreenX, maxScreenY
 	end
 
 	local function isVisible(character, position)
@@ -516,30 +613,13 @@ function ESP.build(tab, menu)
 	end
 
 	local function drawEntry(player, entry, character, humanoid, camera, viewport)
-		local cframe, size = getBounds(character)
-		if not cframe or not size then
+		local cframe = getBounds(character)
+		if not cframe then
 			hideEntry(entry)
 			return
 		end
 
 		local center = cframe.Position
-		local topWorld = center + Vector3.new(0, size.Y * 0.5, 0)
-		local bottomWorld = center - Vector3.new(0, size.Y * 0.5, 0)
-
-		local topScreen, topOnScreen = camera:WorldToViewportPoint(topWorld)
-		local bottomScreen, bottomOnScreen = camera:WorldToViewportPoint(bottomWorld)
-
-		if not topOnScreen or not bottomOnScreen or topScreen.Z <= 0 or bottomScreen.Z <= 0 then
-			hideEntry(entry)
-			return
-		end
-
-		local rawHeight = bottomScreen.Y - topScreen.Y
-		if rawHeight < 1 then
-			hideEntry(entry)
-			return
-		end
-
 		local distance = (camera.CFrame.Position - center).Magnitude
 		if distance > maxDistance then
 			hideEntry(entry)
@@ -568,26 +648,32 @@ function ESP.build(tab, menu)
 		local category = getCategory(player)
 		local color = teamColors and (CATEGORY_COLORS[category] or customColor) or customColor
 
-		-- One distance-derived scale keeps the box, text, health bar, flags,
-		-- and every offset in the same proportion at any range.
+		local minScreenX, minScreenY, maxScreenX, maxScreenY = getScreenBodyBounds(character, entry, camera, now)
+		if not minScreenX then
+			hideEntry(entry)
+			return
+		end
+
+		-- Fit the box around every visible body part, then use the box height
+		-- to scale the text, health bar, flags, and gaps.
+		local leftX = round(minScreenX) - BODY_PADDING
+		local topY = round(minScreenY) - BODY_PADDING
+		local rightX = round(maxScreenX) + BODY_PADDING
+		local bottomY = round(maxScreenY) + BODY_PADDING
+		local boxWidth = math.max(rightX - leftX, 1)
+		local boxHeight = math.max(bottomY - topY, 1)
+		local centerX = round((leftX + rightX) * 0.5)
+
 		local lowHeight = math.min(minBoxHeight, maxBoxHeight)
 		local highHeight = math.max(minBoxHeight, maxBoxHeight)
-		local boxHeight = REFERENCE_BOX_HEIGHT
+		local scale = 1
 		if scaleWithDistance then
-			boxHeight = round(math.clamp(rawHeight, lowHeight, highHeight))
+			scale = math.clamp(boxHeight, lowHeight, highHeight) / REFERENCE_BOX_HEIGHT
 		end
-		local scale = boxHeight / REFERENCE_BOX_HEIGHT
-		local boxWidth = math.max(round(boxHeight * BOX_WIDTH_RATIO), 6)
 
-		local centerX = round((topScreen.X + bottomScreen.X) * 0.5)
-		local centerY = round((topScreen.Y + bottomScreen.Y) * 0.5)
-		local leftX = centerX - math.floor(boxWidth * 0.5)
-		local rightX = leftX + boxWidth
-		local topY = centerY - math.floor(boxHeight * 0.5)
-		local bottomY = topY + boxHeight
 		local drawings = entry.drawings
 
-		local thickness = math.max(round(boxThickness * scale), 1)
+		local thickness = math.max(round(scale), 1)
 
 		drawings.fill.Visible = showBox and boxFill
 		if showBox and boxFill then
@@ -673,7 +759,7 @@ function ESP.build(tab, menu)
 			end
 		end
 
-		local textPixelSize = math.max(round(textSize * scale), 1)
+		local textPixelSize = math.max(round(DEFAULT_TEXT_SIZE * scale), 1)
 
 		drawings.name.Text = getPlayerName(player)
 		drawings.name.Size = textPixelSize
@@ -953,20 +1039,6 @@ function ESP.build(tab, menu)
 		end,
 	})
 
-	appearanceSection:Slider({
-		Title = "Box Thickness",
-		Desc = "Outline thickness in pixels",
-		Step = 1,
-		Value = {
-			Min = 1,
-			Max = 4,
-			Default = 1,
-		},
-		Callback = function(value)
-			boxThickness = value
-		end,
-	})
-
 	appearanceSection:Toggle({
 		Title = "Box Fill",
 		Desc = "Fill the box with a translucent color",
@@ -988,20 +1060,6 @@ function ESP.build(tab, menu)
 		},
 		Callback = function(value)
 			fillOpacity = value / 100
-		end,
-	})
-
-	appearanceSection:Slider({
-		Title = "Text Size",
-		Desc = "Name and distance text size",
-		Step = 1,
-		Value = {
-			Min = 14,
-			Max = 20,
-			Default = DEFAULT_TEXT_SIZE,
-		},
-		Callback = function(value)
-			textSize = value
 		end,
 	})
 
@@ -1073,13 +1131,13 @@ function ESP.build(tab, menu)
 
 	local scalingSection = tab:Section({
 		Title = "Scaling",
-		Desc = "Control how the ESP resizes with distance",
+		Desc = "Control how text and flags scale with the box",
 		Box = true,
 	})
 
 	scalingSection:Toggle({
 		Title = "Scale With Distance",
-		Desc = "Shrink the whole ESP as players get farther away",
+		Desc = "Scale text, flags, and gaps with the box",
 		Value = true,
 		Callback = function(state)
 			scaleWithDistance = state
@@ -1087,8 +1145,8 @@ function ESP.build(tab, menu)
 	})
 
 	scalingSection:Slider({
-		Title = "Min Height",
-		Desc = "Smallest box height in pixels",
+		Title = "Min Detail Height",
+		Desc = "Smallest height used to scale details",
 		Step = 1,
 		Value = {
 			Min = MIN_BOX_HEIGHT_LIMIT,
@@ -1101,8 +1159,8 @@ function ESP.build(tab, menu)
 	})
 
 	scalingSection:Slider({
-		Title = "Max Height",
-		Desc = "Largest box height in pixels",
+		Title = "Max Detail Height",
+		Desc = "Largest height used to scale details",
 		Step = 1,
 		Value = {
 			Min = 60,
