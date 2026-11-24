@@ -3,7 +3,7 @@
 	Entry point. Host Main.lua next to src/, then run this file.
 ]]
 
-local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Mad-City/refs/heads/main/Menu/"
+local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/"
 
 local function loadScript(path)
 	local url = baseUrl .. path .. ".lua?t=" .. os.time()
@@ -13,6 +13,12 @@ local function loadScript(path)
 	if not ok then
 		error("Failed to download " .. url .. "\n" .. tostring(source), 0)
 	end
+	if type(source) ~= "string" or source == "" then
+		error("Empty response for " .. url .. " (is the file uploaded?)", 0)
+	end
+	if source:match("^404:") then
+		error("File not found: " .. url, 0)
+	end
 
 	local chunk, compileError = loadstring(source)
 	if not chunk then
@@ -21,17 +27,30 @@ local function loadScript(path)
 	return chunk()
 end
 
-local Shared = loadScript("src/Shared")
-local Library = loadScript("src/Library")
-local Menu = loadScript("src/Menu")
+local function expect(module, name, field)
+	if type(module) ~= "table" or (field and type(module[field]) ~= "function") then
+		error(name .. " did not return a valid module", 0)
+	end
+	return module
+end
+
+local Shared = expect(loadScript("src/Shared"), "src/Shared.lua")
+local Library = expect(loadScript("src/Library"), "src/Library.lua", "load")
+local Menu = expect(loadScript("src/Menu"), "src/Menu.lua", "new")
+
+if type(Shared.settings) ~= "table" or type(Shared.settings.featureOrder) ~= "table" then
+	error("src/Shared.lua is missing Shared.settings.featureOrder", 0)
+end
 
 local tabs = {}
 for _, tabName in ipairs(Shared.settings.featureOrder) do
-	local tabModule = loadScript("src/features/" .. tabName .. "/Init")
+	local tabPath = "src/features/" .. tabName .. "/Init"
+	local tabModule = expect(loadScript(tabPath), tabPath, "build")
 
 	local featureModules = {}
 	for _, featureName in ipairs(tabModule.features or {}) do
-		table.insert(featureModules, loadScript("src/features/" .. tabName .. "/" .. featureName))
+		local featurePath = "src/features/" .. tabName .. "/" .. featureName
+		table.insert(featureModules, expect(loadScript(featurePath), featurePath, "build"))
 	end
 
 	table.insert(tabs, {
