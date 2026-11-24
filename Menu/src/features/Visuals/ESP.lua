@@ -719,6 +719,11 @@ function ESP.build(tab, menu)
 
 		local flags = entry.flags or {}
 		local flagCount = 0
+		local flagOffset = 0
+		if healthVisible and flagSide == healthSide then
+			flagOffset = HEALTH_BAR_WIDTH + 3
+		end
+
 		for index = 1, MAX_FLAGS do
 			local drawing = drawings.flags[index]
 			local flag = flags[index]
@@ -738,9 +743,9 @@ function ESP.build(tab, menu)
 
 				local flagX
 				if flagSide == "Left" then
-					flagX = leftX - FLAG_GAP - flagWidth
+					flagX = leftX - FLAG_GAP - flagOffset - flagWidth
 				else
-					flagX = rightX + FLAG_GAP
+					flagX = rightX + FLAG_GAP + flagOffset
 				end
 
 				drawing.Position = Vector2.new(flagX, topY + (index - 1) * (flagSize + FLAG_LINE_GAP))
