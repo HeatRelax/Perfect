@@ -323,7 +323,6 @@ function ESP.build(tab, menu)
 	local customColor = DEFAULT_COLOR
 	local nameMode = "Username"
 	local healthSide = "Left"
-	local healthGap = HEALTH_BAR_GAP
 	local tracerOrigin = "Bottom"
 
 	local showCash = true
@@ -333,7 +332,6 @@ function ESP.build(tab, menu)
 	local showLabels = true
 	local flagSide = "Right"
 	local flagSize = DEFAULT_FLAG_SIZE
-	local flagGap = FLAG_GAP
 
 	local pool = {}
 	local connection
@@ -707,7 +705,7 @@ function ESP.build(tab, menu)
 
 		local healthVisible = false
 		local healthWidth = math.max(round(HEALTH_BAR_WIDTH * scale), 1)
-		local scaledHealthGap = healthGap > 0 and math.max(round(healthGap * scale), 1) or 0
+		local scaledHealthGap = HEALTH_BAR_GAP > 0 and math.max(round(HEALTH_BAR_GAP * scale), 1) or 0
 		if showHealth then
 			local maxHealth = math.max(humanoid.MaxHealth, 1)
 			local fraction = math.clamp(humanoid.Health / maxHealth, 0, 1)
@@ -767,7 +765,7 @@ function ESP.build(tab, menu)
 		end
 
 		local flagTextSize = math.max(round(flagSize * scale), 1)
-		local scaledFlagGap = flagGap > 0 and math.max(round(flagGap * scale), 1) or 0
+		local scaledFlagGap = FLAG_GAP > 0 and math.max(round(FLAG_GAP * scale), 1) or 0
 		local flagLineGap = math.max(round(FLAG_LINE_GAP * scale), 1)
 
 		for index = 1, MAX_FLAGS do
@@ -998,7 +996,7 @@ function ESP.build(tab, menu)
 		Desc = "Name and distance text size",
 		Step = 1,
 		Value = {
-			Min = 10,
+			Min = 14,
 			Max = 20,
 			Default = DEFAULT_TEXT_SIZE,
 		},
@@ -1060,20 +1058,6 @@ function ESP.build(tab, menu)
 		Value = "Left",
 		Callback = function(value)
 			healthSide = value
-		end,
-	})
-
-	appearanceSection:Slider({
-		Title = "Health Gap",
-		Desc = "Space between the health bar and box",
-		Step = 1,
-		Value = {
-			Min = 0,
-			Max = 20,
-			Default = HEALTH_BAR_GAP,
-		},
-		Callback = function(value)
-			healthGap = value
 		end,
 	})
 
@@ -1190,20 +1174,6 @@ function ESP.build(tab, menu)
 		Value = "Right",
 		Callback = function(value)
 			flagSide = value
-		end,
-	})
-
-	flagsSection:Slider({
-		Title = "Flag Gap",
-		Desc = "Space between flags and the box",
-		Step = 1,
-		Value = {
-			Min = 0,
-			Max = 20,
-			Default = FLAG_GAP,
-		},
-		Callback = function(value)
-			flagGap = value
 		end,
 	})
 

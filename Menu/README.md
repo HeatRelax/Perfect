@@ -103,12 +103,11 @@ The Visuals tab includes Player ESP, drawn with the executor's `Drawing` API.
 - **Appearance**: **Box Style** (Full, Corners, 3D), **Box Thickness**,
   **Box Fill** and **Fill Opacity**, **Text Size**, **Text Outline** and
   **Outline Color**, **Team Colors**, **ESP Color**, **Name Mode** (username,
-  display name, or both), **Health Side**, **Health Gap**, and
-  **Tracer Origin** (bottom, center, or mouse).
+  display name, or both), **Health Side**, and **Tracer Origin** (bottom,
+  center, or mouse).
 - **Info Flags** sit beside the box: **Cash**, **Rank**, **Bounty**, and
   **Weapon** (the held tool name, shown without a label). Flags can show
-  labels, move to the left side, use their own text size, and set their
-  distance from the box with **Flag Gap**.
+  labels, move to the left side, and use their own text size.
 - **Scaling** controls how the overlay resizes: **Scale With Distance**
   shrinks everything as players move away, while **Min Height** and
   **Max Height** set the box size range in pixels.
