@@ -8,25 +8,33 @@ src/
   Shared.lua              services, window settings, sidebar groups, feature order
   Theme.lua               custom WindUI "Mad City" theme
   Library.lua             WindUI loader (Studio: ReplicatedStorage, live: GitHub)
-  Menu.lua                window shell, sidebar groups, and tab registration
+  Menu.lua                window shell, cleanup registry, and tab registration
+  Unload.lua              removes a previous menu instance and its GUIs
   features/
     Movement/
       Init.lua            tab definition + feature list
       Flight.lua          fly toggle, keybind, speed slider
     Player/
       Init.lua
+    Combat/
+      Init.lua            tab definition + shared module list
+      Common.lua          targeting, team checks, wall checks, FOV circle
+      Aimbot.lua          smooth camera aimbot
+      SilentAim.lua       WeaponCore shot hooks
     Teleport/
       Init.lua
     Visuals/
       Init.lua
     Misc/
       Init.lua
+Decompiled/
+  WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
 
 The menu loads WindUI, applies the custom **Mad City** theme, and opens
-Movement, Player, Teleport, Visuals, and Misc tabs. Tabs are grouped in the
-sidebar under **Gameplay**, **World**, and **Utility**. Each feature file under
-a tab folder adds its own controls.
+Movement, Player, Combat, Teleport, Visuals, and Misc tabs. Tabs are grouped in
+the sidebar under **Gameplay**, **Combat**, **World**, and **Utility**. Each
+feature file under a tab folder adds its own controls.
 
 ## Interface
 
@@ -44,6 +52,49 @@ The Movement tab includes Flight:
 - `WASD` moves relative to the camera.
 - `Space` moves up, `LeftControl` moves down.
 - **Fly Speed** slider adjusts movement speed.
+- When a nearby vehicle seat is free, flight uses the seat-persist bypass;
+  otherwise it falls back to normal flight.
+
+## Combat
+
+The Combat tab has two features.
+
+### Aimbot
+
+Moves the camera onto the nearest target inside the FOV circle.
+
+- **Enabled** toggle, **Activation** (`Hold`, `Toggle`, `Always`), and **Aim Key**.
+- **Smoothness**, **FOV**, and **Max Distance** sliders.
+- **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
+- **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
+- The FOV circle is centered on the game crosshair, which sits 58 pixels above
+  the camera projection center.
+
+### Silent Aim
+
+Re-aims shots without moving the camera or your input.
+
+- **Enabled** toggle, **FOV** and **Max Distance** sliders.
+- **Target Part**, **Team Check**, **Wall Check**, **Max Damage**, **Show FOV**.
+- **Reinstall Hooks** re-hooks WeaponCore after a respawn or script reset.
+- **Hook Status** shows how many of the four shot functions are hooked.
+- Hooks `WeaponCore.ShootGun`, `ShootShotgun`, `ShootTazer`, and `ShootRayGun`,
+  replacing the aim point and spread, and setting damage to `1e9` when
+  **Max Damage** is on. If WeaponCore hooks cannot be installed, the remote
+  `ReplicatedStorage.Event` namecall path is used as a fallback.
+
+## Unload
+
+Loading the menu again automatically unloads the previous instance. You can
+also unload it manually:
+
+```lua
+getgenv().MadCityMenu.Unload()
+```
+
+Unloading disconnects feature connections, removes FOV circles, restores
+WeaponCore hooks, destroys the window, and clears leftover WindUI/MadCity
+ScreenGuis.
 
 ## Hosting
 
@@ -61,8 +112,9 @@ If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
 - `src/Shared.lua` — service references, window options, sidebar groups, feature order
 - `src/Theme.lua` — custom WindUI colors, gradients, and component styling
 - `src/Library.lua` — WindUI source resolution; normally does not need changing
-- `src/Menu.lua` — creates the window, sidebar groups, and exposes `menu:addTab(...)`
-- `src/features/<Tab>/Init.lua` — tab definition and its feature list
+- `src/Menu.lua` — creates the window, sidebar groups, cleanup registry, and exposes `menu:addTab(...)`
+- `src/Unload.lua` — previous-instance detection and GUI cleanup
+- `src/features/<Tab>/Init.lua` — tab definition, shared modules, and feature list
 - `src/features/<Tab>/<Feature>.lua` — one feature per file
 
 ### Adding a feature
@@ -72,7 +124,7 @@ Create `src/features/Movement/<Feature>.lua`:
 ```lua
 local Example = {}
 
-function Example.build(tab, menu)
+function Example.build(tab, menu, modules)
     tab:Button({
         Title = "Example button",
         Callback = function()
@@ -85,6 +137,15 @@ return Example
 ```
 
 Then add `"Example"` to the `features` list in `src/features/Movement/Init.lua`.
+
+If a feature needs a shared helper, add the helper name to the tab's `modules`
+list. The loader downloads it once and passes a keyed table to every feature:
+
+```lua
+modules = { "Common" },
+
+features = { "Aimbot", "SilentAim" },
+```
 
 ### Adding a tab
 

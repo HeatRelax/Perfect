@@ -95,7 +95,9 @@ function Flight.build(tab, menu)
 		end
 
 		syncingToggle = true
-		toggle:Set(state)
+		pcall(function()
+			toggle:Set(state)
+		end)
 		syncingToggle = false
 	end
 
@@ -798,17 +800,21 @@ function Flight.build(tab, menu)
 					stopFlying()
 				end
 			end)
+
+			if menu and type(menu.addConnection) == "function" then
+				menu:addConnection(deathConnection)
+			end
 		end
 	end
 
-	player.CharacterAdded:Connect(function(character)
+	menu:addConnection(player.CharacterAdded:Connect(function(character)
 		if flying then
 			stopFlying()
 		end
 		bindCharacter(character)
-	end)
+	end))
 
-	userInputService.InputBegan:Connect(function(input, gameProcessed)
+	menu:addConnection(userInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
 		end
@@ -819,6 +825,12 @@ function Flight.build(tab, menu)
 			return
 		end
 		setFlying(not flying)
+	end))
+
+	menu:addCleanup(function()
+		if flying or bypassArmed or holding then
+			stopFlying()
+		end
 	end)
 
 	bindCharacter(player.Character)

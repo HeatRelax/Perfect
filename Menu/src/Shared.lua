@@ -10,11 +10,14 @@ Shared.services = {
 	players = cloneref(game:GetService("Players")),
 	replicatedStorage = cloneref(game:GetService("ReplicatedStorage")),
 	runService = cloneref(game:GetService("RunService")),
+	teams = cloneref(game:GetService("Teams")),
 	userInputService = cloneref(game:GetService("UserInputService")),
 	workspace = cloneref(game:GetService("Workspace")),
 }
 
 Shared.settings = {
+	version = "1.2.0",
+
 	window = {
 		Title = "Mad City",
 		Author = "Classic Season 2",
@@ -26,11 +29,11 @@ Shared.settings = {
 		HidePanelBackground = false,
 		ScrollBarEnabled = true,
 
-		Size = UDim2.fromOffset(660, 520),
-		MinSize = Vector2.new(580, 440),
-		MaxSize = Vector2.new(960, 680),
+		Size = UDim2.fromOffset(720, 560),
+		MinSize = Vector2.new(620, 480),
+		MaxSize = Vector2.new(1000, 720),
 		Resizable = true,
-		SideBarWidth = 196,
+		SideBarWidth = 204,
 		ToggleKey = Enum.KeyCode.RightShift,
 
 		User = {
@@ -55,7 +58,7 @@ Shared.settings = {
 		},
 
 		Topbar = {
-			Height = 48,
+			Height = 50,
 			ButtonsType = "Mac",
 		},
 	},
@@ -65,6 +68,11 @@ Shared.settings = {
 		Gameplay = {
 			Title = "Gameplay",
 			Icon = "lucide:gamepad-2",
+			Opened = true,
+		},
+		Combat = {
+			Title = "Combat",
+			Icon = "lucide:crosshair",
 			Opened = true,
 		},
 		World = {
@@ -80,7 +88,7 @@ Shared.settings = {
 	},
 
 	-- Each feature builds its own tab, in this order.
-	featureOrder = { "Movement", "Player", "Teleport", "Visuals", "Misc" },
+	featureOrder = { "Movement", "Player", "Combat", "Teleport", "Visuals", "Misc" },
 }
 
 return Shared
