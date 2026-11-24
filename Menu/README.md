@@ -23,7 +23,7 @@ Upload `Main.lua` and the whole `src/` folder to the same directory on GitHub.
 Point the executor at `Main.lua`:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/LuaSecurity/Mad-City/refs/heads/main/Menu/Main.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/Main.lua"))()
 ```
 
 If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
