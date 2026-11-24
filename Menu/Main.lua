@@ -35,6 +35,7 @@ local function expect(module, name, field)
 end
 
 local Shared = expect(loadScript("src/Shared"), "src/Shared.lua")
+local Theme = expect(loadScript("src/Theme"), "src/Theme.lua", "apply")
 local Library = expect(loadScript("src/Library"), "src/Library.lua", "load")
 local Menu = expect(loadScript("src/Menu"), "src/Menu.lua", "new")
 
@@ -60,13 +61,31 @@ for _, tabName in ipairs(Shared.settings.featureOrder) do
 end
 
 local windui = Library.load(Shared)
-local menu = Menu.new(Shared, windui)
+Shared.settings.window.Theme = Theme.apply(windui)
 
+local menu = Menu.new(Shared, windui)
 menu:start()
 
+local firstTab
 for _, tabData in ipairs(tabs) do
 	local tab = tabData.module.build(menu)
+	firstTab = firstTab or tab
 	for _, feature in ipairs(tabData.features) do
 		feature.build(tab, menu)
 	end
 end
+
+if firstTab and type(firstTab.Select) == "function" then
+	pcall(function()
+		firstTab:Select()
+	end)
+end
+
+pcall(function()
+	windui:Notify({
+		Title = "Mad City Menu",
+		Content = "Loaded. Press RightShift to toggle.",
+		Icon = "lucide:gamepad-2",
+		Duration = 4,
+	})
+end)

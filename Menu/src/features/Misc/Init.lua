@@ -1,10 +1,19 @@
 local Misc = {
 	tab = {
 		Title = "Misc",
-		Icon = "lucide:settings",
-		IconColor = Color3.fromHex("#83889E"),
+		Desc = "Extra utilities and settings",
+		section = "Utility",
+		Icon = "lucide:wrench",
+		IconColor = Color3.fromHex("#94A3B8"),
 		IconShape = "Square",
 		Border = true,
+		ShowTabTitle = true,
+		CustomEmptyPage = {
+			Icon = "lucide:wrench",
+			IconSize = 44,
+			Title = "Misc",
+			Desc = "Extra utilities are coming soon.",
+		},
 	},
 
 	features = {},

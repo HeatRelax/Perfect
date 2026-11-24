@@ -1,10 +1,19 @@
 local Visuals = {
 	tab = {
 		Title = "Visuals",
-		Icon = "lucide:eye",
-		IconColor = Color3.fromHex("#ECA201"),
+		Desc = "ESP, lighting, and overlays",
+		section = "World",
+		Icon = "lucide:scan-eye",
+		IconColor = Color3.fromHex("#FBBF24"),
 		IconShape = "Square",
 		Border = true,
+		ShowTabTitle = true,
+		CustomEmptyPage = {
+			Icon = "lucide:scan-eye",
+			IconSize = 44,
+			Title = "Visuals",
+			Desc = "Visual tools are coming soon.",
+		},
 	},
 
 	features = {},

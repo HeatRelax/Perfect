@@ -1,10 +1,19 @@
 local Teleport = {
 	tab = {
 		Title = "Teleport",
-		Icon = "lucide:map-pin",
-		IconColor = Color3.fromHex("#7775F2"),
+		Desc = "Fast travel and locations",
+		section = "World",
+		Icon = "lucide:map-pinned",
+		IconColor = Color3.fromHex("#A78BFA"),
 		IconShape = "Square",
 		Border = true,
+		ShowTabTitle = true,
+		CustomEmptyPage = {
+			Icon = "lucide:map-pinned",
+			IconSize = 44,
+			Title = "Teleport",
+			Desc = "Fast travel options are coming soon.",
+		},
 	},
 
 	features = {},

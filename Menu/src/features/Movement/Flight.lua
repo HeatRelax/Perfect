@@ -169,6 +169,7 @@ function Flight.build(tab, menu)
 	local flightSection = tab:Section({
 		Title = "Flight",
 		Desc = "Toggle flight and configure its controls",
+		Box = true,
 	})
 
 	toggle = flightSection:Toggle({
@@ -216,6 +217,12 @@ function Flight.build(tab, menu)
 		Callback = function(value)
 			flySpeed = value
 		end,
+	})
+
+	tab:Paragraph({
+		Title = "Flight Controls",
+		Desc = "WASD to move, Space to rise, LeftControl to descend.",
+		Image = "lucide:keyboard",
 	})
 
 	local function bindCharacter(character)
