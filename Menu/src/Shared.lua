@@ -16,54 +16,24 @@ Shared.services = {
 }
 
 Shared.settings = {
-	version = "1.2.0",
+	version = "2.0.0",
+
+	-- Main.lua overwrites this with the URL it loaded from.
+	baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/",
+
+	-- Tokyo UI storage folder names.
+	folder = "MadCityMenu",
+	game = "MadCity",
 
 	window = {
 		Title = "Mad City",
 		Author = "Classic Season 2",
-		Folder = "madcity",
-		Icon = "lucide:gamepad-2",
-		IconSize = 22,
-		NewElements = true,
-		HideSearchBar = false,
-		HidePanelBackground = false,
-		ScrollBarEnabled = true,
-
-		Size = UDim2.fromOffset(720, 560),
-		MinSize = Vector2.new(620, 480),
-		MaxSize = Vector2.new(1000, 720),
-		Resizable = true,
-		SideBarWidth = 204,
 		ToggleKey = Enum.KeyCode.RightShift,
-
-		User = {
-			Enabled = true,
-			Anonymous = false,
-		},
-
-		OpenButton = {
-			Title = "Mad City",
-			Icon = "lucide:gamepad-2",
-			CornerRadius = UDim.new(0, 14),
-			StrokeThickness = 2,
-			Enabled = true,
-			Draggable = true,
-			OnlyMobile = false,
-			Scale = 0.7,
-
-			Color = ColorSequence.new(
-				Color3.fromHex("#2EE66B"),
-				Color3.fromHex("#22D3EE")
-			),
-		},
-
-		Topbar = {
-			Height = 50,
-			ButtonsType = "Mac",
-		},
+		Size = UDim2.new(0, 720, 0, 600),
 	},
 
-	-- Sidebar groups. Tabs pick one with tab.section.
+	-- Sidebar grouping metadata kept for the tab definitions. Tokyo UI
+	-- renders a flat tab row, so the adapter does not use these groups.
 	tabSections = {
 		Gameplay = {
 			Title = "Gameplay",

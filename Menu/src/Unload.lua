@@ -5,6 +5,7 @@ local GUI_NAMES = {
 	["WindUI/Notifications"] = true,
 	["WindUI/Dropdowns"] = true,
 	["WindUI/Tooltips"] = true,
+	MadCityTokyo = true,
 }
 
 local function getGenv()
@@ -93,9 +94,16 @@ end
 function Unload.previous()
 	local env = getGenv()
 	local handle = env and env.MadCityMenu
+	local unloaded = false
 
 	if type(handle) == "table" and type(handle.Unload) == "function" then
 		pcall(handle.Unload)
+		unloaded = true
+	end
+
+	-- Fallback for a Tokyo library that outlived its menu handle.
+	if not unloaded and env and type(env.library) == "table" and type(env.library.Unload) == "function" then
+		pcall(env.library.Unload, env.library)
 	end
 
 	if env then

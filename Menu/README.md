@@ -1,14 +1,19 @@
 # Mad City Menu
 
+A modular Mad City menu built on [Tokyo UI](https://github.com/dohmai/Tokyo).
+The entry point loads every tab and feature from GitHub, so the whole `src/`
+folder can be edited independently.
+
 ## Layout
 
 ```
 Main.lua                  entry point (the executor only loads this)
 src/
-  Shared.lua              services, window settings, sidebar groups, feature order
-  Theme.lua               custom WindUI "Mad City" theme
-  Library.lua             WindUI loader (Studio: ReplicatedStorage, live: GitHub)
-  Menu.lua                window shell, cleanup registry, and tab registration
+  Shared.lua              services, window settings, feature order
+  Theme.lua               Tokyo UI "Mad City" palette
+  Library.lua             Tokyo UI loader + source patches
+  Menu.lua                Tokyo adapter (tabs, sections, controls, cleanup)
+  Signal.lua              standalone GoodSignal used by Tokyo UI
   Unload.lua              removes a previous menu instance and its GUIs
   features/
     Movement/
@@ -31,18 +36,17 @@ Decompiled/
   WeaponCore.lua          local reference decompilation (not required at runtime)
 ```
 
-The menu loads WindUI, applies the custom **Mad City** theme, and opens
-Movement, Player, Combat, Teleport, Visuals, and Misc tabs. Tabs are grouped in
-the sidebar under **Gameplay**, **Combat**, **World**, and **Utility**. Each
-feature file under a tab folder adds its own controls.
+The menu opens Movement, Player, Combat, Teleport, Visuals, and Misc tabs.
+Each feature file adds its own controls to its tab. Tokyo UI lays tabs out as a
+flat row and splits every tab into two columns; the adapter alternates sections
+across those columns and appends paragraphs to the section that created them.
 
 ## Interface
 
-- Deep navy surfaces with green and cyan gradient accents.
-- Grouped sidebar sections with colored tab badges.
-- Window profile card, search bar, scrollbar, and resizable layout.
+- Dark navy surfaces with the Mad City green/cyan accent palette.
+- Two-column Tokyo sections with toggles, sliders, dropdowns, keybinds, and buttons.
 - Press `RightShift` to show or hide the menu.
-- The open button can be dragged around the screen.
+- A short notification confirms the version when the menu loads.
 
 ## Flight
 
@@ -67,6 +71,7 @@ Moves the camera onto the nearest target inside the FOV circle.
 - **Smoothness**, **FOV**, and **Max Distance** sliders.
 - **Target Part** (`Head`, `UpperTorso`, `HumanoidRootPart`).
 - **Team Check**, **Wall Check**, **Prediction**, and **Show FOV** toggles.
+- The prediction slider stays locked until **Prediction** is enabled.
 - The FOV circle is centered on the game crosshair, which sits 58 pixels above
   the camera projection center.
 
@@ -92,9 +97,9 @@ also unload it manually:
 getgenv().MadCityMenu.Unload()
 ```
 
-Unloading disconnects feature connections, removes FOV circles, restores
-WeaponCore hooks, destroys the window, and clears leftover WindUI/MadCity
-ScreenGuis.
+Unloading runs feature cleanups, disconnects input connections, removes FOV
+circles, restores WeaponCore hooks, and calls Tokyo UI's `Unload()`, which
+removes every Drawing object and destroys the `MadCityTokyo` ScreenGui.
 
 ## Hosting
 
@@ -106,13 +111,15 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/LuaSecurity/Perfect/r
 ```
 
 If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
+`Main.lua` also accepts a local test root through
+`getgenv().MadCityBaseUrl`.
 
 ## Editing
 
-- `src/Shared.lua` — service references, window options, sidebar groups, feature order
-- `src/Theme.lua` — custom WindUI colors, gradients, and component styling
-- `src/Library.lua` — WindUI source resolution; normally does not need changing
-- `src/Menu.lua` — creates the window, sidebar groups, cleanup registry, and exposes `menu:addTab(...)`
+- `src/Shared.lua` — service references, window options, feature order
+- `src/Theme.lua` — Tokyo color keys used by every window element
+- `src/Library.lua` — Tokyo UI download, dependency patches, initialization
+- `src/Menu.lua` — Tokyo adapter and cleanup registry
 - `src/Unload.lua` — previous-instance detection and GUI cleanup
 - `src/features/<Tab>/Init.lua` — tab definition, shared modules, and feature list
 - `src/features/<Tab>/<Feature>.lua` — one feature per file
@@ -156,14 +163,8 @@ local Example = {
     tab = {
         Title = "Example",
         Desc = "What this tab does",
-        section = "Utility",
         Icon = "lucide:wrench",
-        IconColor = Color3.fromHex("#94A3B8"),
-        IconShape = "Square",
-        ShowTabTitle = true,
         CustomEmptyPage = {
-            Icon = "lucide:wrench",
-            IconSize = 44,
             Title = "Example",
             Desc = "Coming soon.",
         },
@@ -180,20 +181,27 @@ return Example
 ```
 
 Then add `"Example"` to `Shared.settings.featureOrder`. `featureOrder` lists
-tab folders in display order. `section` must match a key in
-`Shared.settings.tabSections`.
+tab folders in display order. The `Icon` and `section` fields are kept as
+metadata for future UIs; Tokyo UI renders text-only tabs.
 
 ### Changing the look
 
-Edit `src/Theme.lua` to adjust colors and gradients. The theme is registered
-before the window is created, then selected through
-`Shared.settings.window.Theme`. Window size, sidebar width, open button, user
-card, and toggle key live in `src/Shared.lua`.
+Edit the Tokyo palette in `src/Theme.lua`. Every key Tokyo UI reads is listed
+there: `Accent`, `Background`, `Primary Text`, `Option Background`,
+`Section Background`, and the rest of the palette. Window size, title, and the
+toggle key live in `src/Shared.lua`.
 
-## WindUI loading
+## Tokyo UI loading
 
-`Library.load` tries, in order:
+`Library.load` downloads
+`https://raw.githubusercontent.com/dohmai/Tokyo/main/Libraries/UI`, then
+patches three things before running it:
 
-1. `require("./src/Init")` (local WindUI checkout)
-2. `ReplicatedStorage.WindUI.Init` (Studio)
-3. The WindUI `dist/main.lua` from GitHub (live)
+1. The broken Quenty Signal URL is replaced with this repo's `src/Signal.lua`.
+2. The ScreenGui is named `MadCityTokyo` so `src/Unload.lua` can remove it.
+3. Synapse's embedded base64 color-picker images are converted to data URIs.
+
+After `library:init()`, the theme is applied with `library:SetTheme(...)`, the
+toggle key is set to `RightShift`, and the empty Tokyo keybind indicator is
+hidden. Tokyo UI requires an executor with `Drawing`, `makefolder`, `isfile`,
+`readfile`, and `writefile`.

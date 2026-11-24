@@ -5,6 +5,14 @@
 
 local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/"
 
+-- Local testing hook: set getgenv().MadCityBaseUrl to a local server root.
+if type(getgenv) == "function" then
+	local ok, env = pcall(getgenv)
+	if ok and type(env) == "table" and type(env.MadCityBaseUrl) == "string" then
+		baseUrl = env.MadCityBaseUrl
+	end
+end
+
 local function loadScript(path)
 	local url = baseUrl .. path .. ".lua?t=" .. os.time()
 	local ok, source = pcall(function()
@@ -46,6 +54,8 @@ local Unload = expect(loadScript("src/Unload"), "src/Unload.lua", "previous")
 Unload.previous()
 
 local Shared = expect(loadScript("src/Shared"), "src/Shared.lua")
+Shared.settings.baseUrl = baseUrl
+
 local Theme = expect(loadScript("src/Theme"), "src/Theme.lua", "apply")
 local Library = expect(loadScript("src/Library"), "src/Library.lua", "load")
 local Menu = expect(loadScript("src/Menu"), "src/Menu.lua", "new")
@@ -82,10 +92,14 @@ for _, tabName in ipairs(Shared.settings.featureOrder) do
 	})
 end
 
-local windui = Library.load(Shared)
-Shared.settings.window.Theme = Theme.apply(windui)
+local library = Library.load(Shared)
 
-local menu = Menu.new(Shared, windui)
+local themeOk, themeError = Theme.apply(library)
+if not themeOk then
+	report("Theme could not be applied: " .. tostring(themeError))
+end
+
+local menu = Menu.new(Shared, library)
 menu:start()
 
 local handle
@@ -121,11 +135,4 @@ if firstTab and type(firstTab.Select) == "function" then
 	end)
 end
 
-pcall(function()
-	windui:Notify({
-		Title = "Mad City Menu",
-		Content = "Loaded v" .. tostring(Shared.settings.version) .. ". Press RightShift to toggle.",
-		Icon = "lucide:gamepad-2",
-		Duration = 4,
-	})
-end)
+menu:notify("Mad City", "Loaded v" .. tostring(Shared.settings.version) .. ". Press RightShift to toggle.")

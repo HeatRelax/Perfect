@@ -48,16 +48,8 @@ function SilentAim.build(tab, menu, modules)
 	local status
 
 	local function notify(title, content)
-		local windui = menu.windui
-		if windui and type(windui.Notify) == "function" then
-			pcall(function()
-				windui:Notify({
-					Title = title,
-					Content = content,
-					Icon = "lucide:crosshair",
-					Duration = 4,
-				})
-			end)
+		if menu and type(menu.notify) == "function" then
+			pcall(menu.notify, menu, title, content)
 		end
 	end
 
