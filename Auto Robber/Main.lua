@@ -3,38 +3,85 @@
 	Entry point. Host Main.lua next to src/, then run this file.
 ]]
 
-local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/main/Auto%20Robber/"
-local mainUrl = baseUrl .. "Main.lua"
+local repo = "LuaSecurity/Perfect"
+local repoPath = "Auto%20Robber/"
+
+local function httpGet(url)
+	local ok, body = pcall(function()
+		return game:HttpGet(url)
+	end)
+
+	if ok and type(body) == "string" and body ~= "" and not body:match("^404:") then
+		return body
+	end
+	return nil, body
+end
+
+local function resolveCommitSha()
+	local url = "https://api.github.com/repos/" .. repo .. "/commits/main?t="
+		.. os.time() .. "&r=" .. math.random(100000, 999999)
+	local body = httpGet(url)
+	if not body then
+		return nil
+	end
+	return body:match('"sha"%s*:%s*"([0-9a-f]+)"')
+end
+
+local cachedSha
+if type(getgenv) == "function" then
+	local ok, env = pcall(getgenv)
+	if ok and type(env) == "table" and type(env.MadCityAutoRobberCommit) == "string" then
+		cachedSha = env.MadCityAutoRobberCommit
+	end
+end
+
+-- Pin module downloads to an immutable commit. The API lookup keeps the pin
+-- current; the cached value and the refs/heads fallback keep startup working
+-- when GitHub rate-limits the API or the raw CDN serves an old copy.
+local commitSha = resolveCommitSha() or cachedSha
+
+if commitSha and type(getgenv) == "function" then
+	local ok, env = pcall(getgenv)
+	if ok and type(env) == "table" then
+		env.MadCityAutoRobberCommit = commitSha
+	end
+end
+
+local baseUrls = {}
+if commitSha then
+	table.insert(baseUrls, "https://raw.githubusercontent.com/" .. repo .. "/" .. commitSha .. "/" .. repoPath)
+end
+table.insert(baseUrls, "https://raw.githubusercontent.com/" .. repo .. "/refs/heads/main/" .. repoPath)
+table.insert(baseUrls, "https://raw.githubusercontent.com/" .. repo .. "/main/" .. repoPath)
+table.insert(baseUrls, "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/" .. repoPath)
+
+local mainUrl
+if commitSha then
+	mainUrl = "https://raw.githubusercontent.com/" .. repo .. "/" .. commitSha .. "/" .. repoPath .. "Main.lua"
+else
+	mainUrl = "https://raw.githubusercontent.com/" .. repo .. "/refs/heads/main/" .. repoPath .. "Main.lua"
+end
 
 local function fetchSource(path)
-	local url = baseUrl .. path .. ".lua?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	local lastError
 
-	for attempt = 1, 3 do
-		local ok, source = pcall(function()
-			return game:HttpGet(url)
-		end)
+	for _, baseUrl in ipairs(baseUrls) do
+		local url = baseUrl .. path .. ".lua?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 
-		if ok and type(source) == "string" and source ~= "" and not source:match("^404:") then
-			return source
-		end
+		for attempt = 1, 2 do
+			local source, err = httpGet(url)
+			if source then
+				return source
+			end
 
-		if not ok then
-			lastError = tostring(source)
-		elseif type(source) ~= "string" then
-			lastError = "empty response"
-		elseif source == "" then
-			lastError = "empty response"
-		else
-			lastError = source:sub(1, 160)
-		end
-
-		if attempt < 3 then
-			task.wait(0.5)
+			lastError = tostring(err)
+			if attempt < 2 then
+				task.wait(0.25)
+			end
 		end
 	end
 
-	error("Failed to download " .. url .. "\n" .. tostring(lastError), 0)
+	error("Failed to download " .. path .. ".lua\n" .. tostring(lastError), 0)
 end
 
 local function loadScript(path)
@@ -82,7 +129,7 @@ if type(getgenv) == "function" then
 end
 
 if dryRun then
-	print("[Auto Robber] dry run: loaded " .. #robberies .. " robberies")
+	print("[Auto Robber] dry run: loaded " .. #robberies .. " robberies at " .. tostring(commitSha or "latest"))
 	return
 end
 
@@ -95,6 +142,8 @@ if type(queue_on_teleport) == "function" then
 	local url = mainUrl .. "?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	queue_on_teleport(("loadstring(game:HttpGet(%q))()"):format(url))
 end
+
+print("[Auto Robber] loaded " .. tostring(commitSha or "latest"))
 
 core:start()
 
