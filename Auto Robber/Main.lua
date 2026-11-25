@@ -3,11 +3,11 @@
 	Entry point. Host Main.lua next to src/, then run this file.
 ]]
 
-local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Auto%20Robber/"
+local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/main/Auto%20Robber/"
 local mainUrl = baseUrl .. "Main.lua"
 
 local function fetchSource(path)
-	local url = baseUrl .. path .. ".lua?t=" .. os.time()
+	local url = baseUrl .. path .. ".lua?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	local lastError
 
 	for attempt = 1, 3 do
@@ -92,7 +92,7 @@ core.stats = stats
 stats:start()
 
 if type(queue_on_teleport) == "function" then
-	local url = mainUrl .. "?t=" .. os.time()
+	local url = mainUrl .. "?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	queue_on_teleport(("loadstring(game:HttpGet(%q))()"):format(url))
 end
 
