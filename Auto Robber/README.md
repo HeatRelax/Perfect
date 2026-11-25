@@ -8,7 +8,7 @@ src/
   Shared.lua              services, settings, game primitives, cash formatting
   Core.lua                flow engine (travel, guards, idling, HUD, rejoin, disconnect recovery)
   Stats.lua               runtime stats, persistence, Discord webhook reports
-  Performance.lua         automatic max-FPS / black-screen boost
+  Performance.lua         automatic performance boost (3D rendering stays on)
   robberies/
     Jewelry.lua
     Club.lua
@@ -124,12 +124,11 @@ script gives up after four attempts and leaves `Reconnect failed - rejoin
 manually` in the HUD. A Roblox-wide outage or a moderation ban cannot be bypassed
 by rejoining.
 
-## FPS boost
+## Performance boost
 
-The script enables the max-FPS setup automatically at startup; there is no menu
-or panel. It applies:
+The script enables the performance setup automatically at startup; there is no
+menu or panel. It applies:
 
-- **Black Screen** — disables 3D rendering and covers the game in black.
 - **Low Graphics** — forces the lowest Roblox quality level.
 - **No Shadows** — disables global and soft shadows.
 - **No Post Effects** — removes bloom, blur, depth of field, sky, and atmosphere.
@@ -138,7 +137,8 @@ or panel. It applies:
 - **Hide Roblox UI** — hides the Roblox topbar, chat, player list, and backpack; the Auto Robber overlays stay visible.
 - **Unlock FPS** — raises the executor FPS cap.
 
-The Auto Robber stats HUD stays visible above the black overlay.
+3D rendering stays enabled; there is no black overlay. The game remains visible
+and the Auto Robber stats HUD stays on top.
 
 To turn the boost off without stopping the script:
 
@@ -169,7 +169,7 @@ If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
 - `src/robberies/<Name>.lua` — one robbery per file (destination, cash target, behavior)
 - `src/Core.lua` — shared flow engine; normally does not need changing
 - `src/Stats.lua` — runtime stats, local persistence, Discord webhook reports
-- `src/Performance.lua` — automatic FPS boost and black screen
+- `src/Performance.lua` — automatic performance boost (3D rendering stays on)
 - Robbery order lives in `Shared.settings.robberyOrder`
 
 ### Adding a robbery

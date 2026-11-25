@@ -1,17 +1,6 @@
 local Performance = {}
 Performance.__index = Performance
 
-local BLACK_LIGHTING_PROPERTIES = {
-	"Ambient",
-	"OutdoorAmbient",
-	"Brightness",
-	"FogColor",
-	"FogStart",
-	"FogEnd",
-	"EnvironmentDiffuseScale",
-	"EnvironmentSpecularScale",
-}
-
 local POST_EFFECT_CLASSES = {
 	BloomEffect = true,
 	BlurEffect = true,
@@ -37,11 +26,9 @@ local ENABLE_ORDER = {
 	"LowTerrain",
 	"HideRobloxUI",
 	"UnlockFPS",
-	"BlackScreen",
 }
 
 local DISABLE_ORDER = {
-	"BlackScreen",
 	"UnlockFPS",
 	"HideRobloxUI",
 	"LowTerrain",
@@ -52,7 +39,6 @@ local DISABLE_ORDER = {
 }
 
 local LABELS = {
-	BlackScreen = "Black Screen",
 	LowGraphics = "Low Graphics",
 	NoShadows = "No Shadows",
 	NoPostEffects = "No Post Effects",
@@ -63,7 +49,6 @@ local LABELS = {
 }
 
 local METHODS = {
-	BlackScreen = "applyBlackScreen",
 	LowGraphics = "applyLowGraphics",
 	NoShadows = "applyNoShadows",
 	NoPostEffects = "applyNoPostEffects",
@@ -86,7 +71,6 @@ function Performance.attach(core)
 	self.player = self.services.players.LocalPlayer
 	self.destroyed = false
 	self.states = {}
-	self.lightingBackup = nil
 	self.graphicsBackup = nil
 	self.shadowsBackup = nil
 	self.effectsBackup = {}
@@ -98,7 +82,6 @@ function Performance.attach(core)
 	self.uiTopbarBackup = nil
 	self.uiWatcherToken = 0
 	self.fpsBackup = nil
-	self.blackGui = nil
 
 	for key in pairs(METHODS) do
 		self.states[key] = false
@@ -115,6 +98,7 @@ function Performance.attach(core)
 		end
 	end
 
+	self:removeLegacyBlackOverlay()
 	self:EnableAll()
 	return self
 end
@@ -154,141 +138,32 @@ function Performance:EnableAll()
 	for _, key in ipairs(ENABLE_ORDER) do
 		self:Set(key, true, true)
 	end
-	print("[Auto Robber] FPS boost active: black screen, low graphics, no shadows, no post effects, no particles, low terrain, hidden Roblox UI, unlocked FPS")
+	print("[Auto Robber] Performance mode active: low graphics, no shadows, no post effects, no particles, low terrain, hidden Roblox UI, unlocked FPS (3D rendering stays on)")
 end
 
 function Performance:DisableAll()
 	for _, key in ipairs(DISABLE_ORDER) do
 		self:Set(key, false, true)
 	end
-	print("[Auto Robber] FPS boost disabled")
+	print("[Auto Robber] Performance mode disabled")
 end
 
-function Performance:applyBlackScreen(state)
-	if state then
-		self:applyBlackLighting()
-
-		local gui = self:createBlackGui()
-		if not gui then
-			pcall(function()
-				self.services.runService:Set3dRenderingEnabled(true)
-			end)
-			self:restoreLighting()
-			error("black overlay could not be created")
-		end
-		self.blackGui = gui
-
-		local ok, err = pcall(function()
-			self.services.runService:Set3dRenderingEnabled(false)
-		end)
-		if not ok then
-			warn("[Auto Robber] 3D toggle unavailable: " .. tostring(err))
-		end
-	else
-		pcall(function()
-			self.services.runService:Set3dRenderingEnabled(true)
-		end)
-		self:restoreLighting()
-
-		if self.blackGui then
-			self.blackGui:Destroy()
-			self.blackGui = nil
-		end
-	end
-end
-
-function Performance:applyBlackLighting()
-	if self.lightingBackup then
-		return
-	end
-
-	local lighting = self.services.lighting
-	local backup = {}
-	for _, property in ipairs(BLACK_LIGHTING_PROPERTIES) do
-		local ok, value = pcall(function()
-			return lighting[property]
-		end)
-		if ok then
-			backup[property] = value
-		end
-	end
-	self.lightingBackup = backup
-
+function Performance:removeLegacyBlackOverlay()
 	pcall(function()
-		lighting.Ambient = Color3.new(0, 0, 0)
-		lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-		lighting.Brightness = 0
-		lighting.FogColor = Color3.new(0, 0, 0)
-		lighting.FogStart = 0
-		lighting.FogEnd = 0
-		lighting.EnvironmentDiffuseScale = 0
-		lighting.EnvironmentSpecularScale = 0
+		self.services.runService:Set3dRenderingEnabled(true)
 	end)
-end
 
-function Performance:restoreLighting()
-	local backup = self.lightingBackup
-	if not backup then
-		return
-	end
-
-	local lighting = self.services.lighting
-	for property, value in pairs(backup) do
-		pcall(function()
-			lighting[property] = value
-		end)
-	end
-	self.lightingBackup = nil
-end
-
-function Performance:createBlackGui()
-	local coreGui = self.services.coreGui
-	local existing = coreGui:FindFirstChild("MadCityAutoRobberBlack")
-	if existing then
-		existing:Destroy()
-	end
-
-	local playerGui = self.player:FindFirstChild("PlayerGui")
-	if not playerGui then
-		local ok, result = pcall(function()
-			return self.player:WaitForChild("PlayerGui", 5)
-		end)
-		if ok then
-			playerGui = result
+	local function destroy(parent)
+		local existing = parent and parent:FindFirstChild("MadCityAutoRobberBlack")
+		if existing then
+			pcall(function()
+				existing:Destroy()
+			end)
 		end
 	end
 
-	local playerExisting = playerGui and playerGui:FindFirstChild("MadCityAutoRobberBlack")
-	if playerExisting then
-		playerExisting:Destroy()
-	end
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "MadCityAutoRobberBlack"
-	gui.DisplayOrder = 2147483646
-	gui.IgnoreGuiInset = true
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-	local frame = Instance.new("Frame")
-	frame.Name = "Black"
-	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = Color3.new(0, 0, 0)
-	frame.BorderSizePixel = 0
-	frame.Parent = gui
-
-	local ok = pcall(function()
-		gui.Parent = coreGui
-	end)
-	if not ok or not gui.Parent then
-		if not playerGui then
-			return nil
-		end
-		gui.DisplayOrder = 2147483647
-		gui.Parent = playerGui
-	end
-
-	return gui
+	destroy(self.services.coreGui)
+	destroy(self.player and self.player:FindFirstChild("PlayerGui"))
 end
 
 function Performance:applyLowGraphics(state)
@@ -615,6 +490,7 @@ function Performance:Destroy()
 	end
 
 	self:DisableAll()
+	self:removeLegacyBlackOverlay()
 	self.destroyed = true
 
 	if self.effectsConnection then
@@ -624,10 +500,6 @@ function Performance:Destroy()
 	if self.particlesConnection then
 		self.particlesConnection:Disconnect()
 		self.particlesConnection = nil
-	end
-	if self.blackGui then
-		self.blackGui:Destroy()
-		self.blackGui = nil
 	end
 
 	if type(getgenv) == "function" then
