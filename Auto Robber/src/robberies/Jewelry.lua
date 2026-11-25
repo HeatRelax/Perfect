@@ -34,6 +34,18 @@ local function collectBoxes(core, folder)
 	return boxes
 end
 
+-- Broken boxes still have positions. The platform and height clamp use this
+-- list so they exist even when the whole store is on restock cooldown.
+local function collectAllBoxes(core, folder)
+	local boxes = {}
+	for _, child in ipairs(folder:GetChildren()) do
+		if isBox(child, folder) and core:getInstancePosition(child) then
+			table.insert(boxes, child)
+		end
+	end
+	return boxes
+end
+
 -- A nearest-neighbour tour lets the character keep moving through the store
 -- without stopping at every box. The tour is rebuilt whenever the current one
 -- has been visited, so boxes that survived a pass are picked up next time.
@@ -144,31 +156,42 @@ local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
 	return platform, farmRootY
 end
 
+local function snapToFarmHeight(core, farmRootY)
+	local character = core.shared.getCharacter()
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root or math.abs(root.Position.Y - farmRootY) <= 0.05 then
+		return
+	end
+
+	local pivot = character:GetPivot()
+	local rotation = pivot - pivot.Position
+	character:PivotTo(CFrame.new(pivot.Position.X, farmRootY, pivot.Position.Z) * rotation)
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+end
+
 -- Noclip turns every character part non-collidable, so the slab cannot catch
 -- the character during parts of the run. This clamp keeps the root at the
--- farming height during any wait, so even a fully non-collidable character can
--- never fall out of event range.
+-- farming height during the vent wait and any pause. The initial snap replaces
+-- the old free-fall from the travel pivot with an instant move to the farm.
 local function startFarmGuard(core, farmRootY)
 	if not farmRootY then
 		return nil
 	end
+
+	snapToFarmHeight(core, farmRootY)
 
 	return core.services.runService.Heartbeat:Connect(function()
 		if core.stopped then
 			return
 		end
 
-		local character = core.shared.getCharacter()
-		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local root = core:getRoot()
 		if not root or root.Position.Y >= farmRootY - 0.05 then
 			return
 		end
 
-		local pivot = character:GetPivot()
-		local rotation = pivot - pivot.Position
-		character:PivotTo(CFrame.new(pivot.Position.X, farmRootY, pivot.Position.Z) * rotation)
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+		snapToFarmHeight(core, farmRootY)
 	end)
 end
 
@@ -485,12 +508,12 @@ function Jewelry.run(core)
 		return false
 	end
 
-	-- Build the slab before the vent wait. The travel pivot starts the
-	-- character above the store with collision enabled, so the slab catches
-	-- the drop instead of letting the character fall through the map.
+	-- Build the slab from every box, broken or not, so it exists even when
+	-- the store is still restocking. The height clamp then snaps the character
+	-- straight to the farm level after the vent instead of letting it fall.
 	local store = core.services.workspace:FindFirstChild("JewelryStore")
 	local folder = store and store:FindFirstChild("JewelryBoxes")
-	local boxes = folder and collectBoxes(core, folder) or {}
+	local boxes = folder and collectAllBoxes(core, folder) or {}
 	local farmRootY
 	for _, box in ipairs(boxes) do
 		local position = core:getInstancePosition(box)
@@ -515,7 +538,7 @@ function Jewelry.run(core)
 		end
 	end
 
-	local fallGuard = startFarmGuard(core, farmRootY)
+	local fallGuard
 
 	local function cleanup()
 		if fallGuard then
@@ -536,6 +559,8 @@ function Jewelry.run(core)
 	end
 
 	core:setNoclip(false)
+	fallGuard = startFarmGuard(core, farmRootY)
+
 	if not core:waitGuarded(timing.ventWait, isLocked, "Waiting at Jewelry vent...") then
 		cleanup()
 		core.state.midHeist = false
