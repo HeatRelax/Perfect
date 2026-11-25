@@ -171,6 +171,7 @@ function Core.new(shared, performance)
 	self.performance = performance
 	self.state = {
 		rejoining = false,
+		rejoinFallbackTried = false,
 		teleporting = false,
 		kickHandling = false,
 		kickAttempts = 0,
@@ -304,11 +305,32 @@ function Core:rejoin()
 	self.state.teleporting = true
 
 	if #self.services.players:GetPlayers() <= 1 or game.JobId == "" then
+		self.state.rejoinFallbackTried = true
 		player:Kick("\nRejoining...")
 		task.wait(0.3)
-		self.services.teleportService:Teleport(game.PlaceId, player, teleportData)
+		local ok, err = pcall(function()
+			self.services.teleportService:Teleport(game.PlaceId, player, teleportData)
+		end)
+		if not ok then
+			warn("[Auto Robber] Rejoin teleport failed: " .. tostring(err))
+		end
 	else
-		self.services.teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
+		self.state.rejoinFallbackTried = false
+		local ok, err = pcall(function()
+			self.services.teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
+		end)
+		if not ok then
+			if not self.state.rejoinFallbackTried then
+				self.state.rejoinFallbackTried = true
+				warn("[Auto Robber] Same-server rejoin failed, joining a new server: " .. tostring(err))
+				local fallbackOk, fallbackErr = pcall(function()
+					self.services.teleportService:Teleport(game.PlaceId, player, teleportData)
+				end)
+				if not fallbackOk then
+					warn("[Auto Robber] Rejoin teleport failed: " .. tostring(fallbackErr))
+				end
+			end
+		end
 	end
 end
 
@@ -531,7 +553,19 @@ function Core:watchForDisconnects()
 			if failedPlayer ~= player then
 				return
 			end
+
 			if self.state.rejoining then
+				if not self.state.rejoinFallbackTried then
+					self.state.rejoinFallbackTried = true
+					warn("[Auto Robber] Same-server rejoin failed, joining a new server: " .. tostring(message))
+					local teleportData = self:getTeleportData()
+					local ok, err = pcall(function()
+						teleportService:Teleport(game.PlaceId, player, teleportData)
+					end)
+					if not ok then
+						warn("[Auto Robber] Rejoin fallback failed: " .. tostring(err))
+					end
+				end
 				return
 			end
 
