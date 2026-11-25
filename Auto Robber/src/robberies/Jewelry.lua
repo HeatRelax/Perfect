@@ -197,6 +197,10 @@ local function enterVent(core, isLocked)
 		return false
 	end
 
+	-- The travel teleport lock has done its job; release it so the temporary
+	-- vent trigger CFrame is not immediately overwritten.
+	core:releasePosition()
+
 	core:setStep("Entering Jewelry vent...")
 	local workspace = core.services.workspace
 	local store = workspace:FindFirstChild("JewelryStore")

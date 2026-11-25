@@ -141,7 +141,9 @@ function MiniHeists.run(core)
 			break
 		end
 
-		character:PivotTo(CFrame.new(pickup.part.Position + Vector3.new(0, tpHeight, 0)))
+		local targetCFrame = CFrame.new(pickup.part.Position + Vector3.new(0, tpHeight, 0))
+		character:PivotTo(targetCFrame)
+		core:enforcePosition(targetCFrame, core.settings.movement.teleportLockTime)
 		task.wait(preFireDelay)
 
 		-- The pickup can despawn between the snapshot and this step. Only

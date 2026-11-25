@@ -105,6 +105,24 @@ available at that boundary without delaying the robbery cycle. A sweep also
 stops early if another player joins; the next robbery then idles until the
 server is solo again. Settings live in `Shared.settings.miniHeists`.
 
+## Teleport lock
+
+A single `PivotTo` can be undone a frame later by server position correction or
+physics, which is why teleports sometimes slid off the destination. Every
+travel, pivot, collect, and mini-heist teleport now also registers its target
+with `core:enforcePosition(targetCFrame)`. While the lock is active, a
+`RunService.Stepped` connection re-applies that CFrame and zeroes the root's
+linear and angular velocity every physics step.
+
+The lock is timed rather than indefinite, so later movement and teleports are
+never blocked:
+
+- `movement.teleportLockTime` (0.6s) — how long the target is re-applied.
+- A newer teleport replaces the target and restarts the timer.
+- `core:releasePosition()` clears it early; the Jewelry vent calls this so the
+  temporary vent-trigger CFrame is not overwritten.
+- `Core:stop` releases the lock along with the noclip listeners.
+
 ## Jewelry box farm
 
 Jewelry no longer tweens to one box, waits for its health to drop, and then
@@ -288,6 +306,8 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | Method | Purpose |
 | --- | --- |
 | `core:travel(destination, isLocked, label)` | respawn via Prisoners if needed, noclip teleport |
+| `core:enforcePosition(cframe, duration)` | re-apply a teleport target on `RunService.Stepped` |
+| `core:releasePosition()` | clear the active teleport lock |
 | `core:collect(label)` | teleport to the cash spot and collect |
 | `core:waitForCash(target, isLocked, label)` | generic wait-until-cash flow |
 | `core:waitForSolo(isLocked, label)` | idle while other players are present |

@@ -189,6 +189,9 @@ function Core.new(shared, performance, stats)
 	self.characterAddedConnection = nil
 	self.cameraConnection = nil
 	self.noclipConnections = {}
+	self.positionLockCFrame = nil
+	self.positionLockUntil = 0
+	self.positionLockConnection = nil
 	self.stopped = false
 	return self
 end
@@ -705,6 +708,7 @@ function Core:stop()
 		end)
 	end
 	self.noclipConnections = {}
+	self:releasePosition()
 	self:setNoclip(false)
 end
 
@@ -1025,6 +1029,50 @@ function Core:tweenTo(destination, speed, isLocked)
 	return not paused and not self:isDead() and not (isLocked and isLocked())
 end
 
+-- A single PivotTo can be undone by server position correction or physics a
+-- moment later. Re-applying the same CFrame on RunService.Stepped for a short
+-- window makes travel, vent and collect teleports stick where they were sent.
+function Core:enforcePosition(targetCFrame, duration)
+	if not targetCFrame then
+		return
+	end
+
+	self.positionLockCFrame = targetCFrame
+	self.positionLockUntil = os.clock()
+		+ math.max(duration or self.settings.movement.teleportLockTime or 0.6, 0.05)
+
+	if self.positionLockConnection then
+		return
+	end
+
+	self.positionLockConnection = self.services.runService.Stepped:Connect(function()
+		local target = self.positionLockCFrame
+		if self.stopped or not target or os.clock() > self.positionLockUntil then
+			self:releasePosition()
+			return
+		end
+
+		local character = self.shared.getCharacter()
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not character or not root then
+			return
+		end
+
+		character:PivotTo(target)
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+	end)
+end
+
+function Core:releasePosition()
+	if self.positionLockConnection then
+		self.positionLockConnection:Disconnect()
+		self.positionLockConnection = nil
+	end
+	self.positionLockCFrame = nil
+	self.positionLockUntil = 0
+end
+
 function Core:pivot(targetCFrame, isLocked, label)
 	if label then
 		self:setStep(label)
@@ -1040,6 +1088,7 @@ function Core:pivot(targetCFrame, isLocked, label)
 	end
 
 	character:PivotTo(targetCFrame)
+	self:enforcePosition(targetCFrame)
 	return true
 end
 

@@ -38,6 +38,11 @@ Shared.settings = {
 		firesPerBox = 1,
 		firesPerLever = 1,
 
+		-- After a teleport, re-apply the target CFrame on RunService.Stepped
+		-- for this many seconds so position correction cannot drag the
+		-- character off the destination.
+		teleportLockTime = 0.6,
+
 		-- Jewelry farms with continuous movement instead of stopping at every
 		-- box. Every live box is fired once per volley; the server only accepts
 		-- hits for boxes near the player, so travelling through the store keeps
