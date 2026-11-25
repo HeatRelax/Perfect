@@ -13,7 +13,7 @@ function Club.run(core)
 		return false
 	end
 
-	if not core:waitForCash(Club.targetCash, isLocked, "Robbing Club (" .. Club.targetCash .. ")") then
+	if not core:waitForCash(Club.targetCash, isLocked, "Robbing Club (" .. Club.targetCash .. ")", "Club") then
 		return false
 	end
 

@@ -13,7 +13,7 @@ function Bank.run(core)
 		return false
 	end
 
-	if not core:waitForCash(Bank.targetCash, isLocked, "Robbing Bank (" .. Bank.targetCash .. ")") then
+	if not core:waitForCash(Bank.targetCash, isLocked, "Robbing Bank (" .. Bank.targetCash .. ")", "Bank") then
 		return false
 	end
 

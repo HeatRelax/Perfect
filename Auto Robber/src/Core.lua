@@ -1390,7 +1390,8 @@ function Core:stopNoclip(connection)
 	self:setNoclip(false)
 end
 
-function Core:runCashLoop(targetText, isLocked)
+function Core:runCashLoop(targetText, isLocked, name)
+	local display = name or targetText
 	local start = os.clock()
 	local bagSeenAt = nil
 	local lastBagValue
@@ -1430,9 +1431,9 @@ function Core:runCashLoop(targetText, isLocked)
 		end
 
 		if appearTimeout and not bagSeenAt and (os.clock() - start) >= appearTimeout then
-			warn("No cash bag appeared for " .. targetText .. " - skipping")
+			warn("No cash bag appeared for " .. display .. " - skipping")
 			if self.stats then
-				self.stats:recordEvent("No loot at " .. targetText .. " (cooldown, skipped)")
+				self.stats:recordEvent("No loot at " .. display .. " (cooldown, skipped)")
 			end
 			return "timeout"
 		end
@@ -1448,12 +1449,12 @@ function Core:runCashLoop(targetText, isLocked)
 
 		if staleLimit and lastBagValue and lastBagValue > 0
 			and (os.clock() - lastBagChangeAt) >= staleLimit then
-			warn("Cash bag stopped growing for " .. targetText .. " - collecting")
+			warn("Cash bag stopped growing for " .. display .. " - collecting")
 			if self.stats then
 				self.stats:recordEvent(string.format(
-					"Bag capped at %s for %s (collected)",
+					"Bag capped at %s at %s (collected)",
 					self.shared.formatCash(label.Text),
-					targetText
+					display
 				))
 			end
 			return "timeout"
@@ -1461,9 +1462,9 @@ function Core:runCashLoop(targetText, isLocked)
 
 		local maxFarmSeconds = self.settings.timing.maxFarmSeconds
 		if maxFarmSeconds and (os.clock() - start) >= maxFarmSeconds then
-			warn("Reached max farm time while waiting for " .. targetText)
+			warn("Reached max farm time while waiting for " .. display)
 			if self.stats then
-				self.stats:recordEvent("Farm timeout while waiting for " .. targetText)
+				self.stats:recordEvent("Farm timeout while waiting for " .. display)
 			end
 			return "timeout"
 		end
@@ -1476,7 +1477,7 @@ function Core:runCashLoop(targetText, isLocked)
 	return "target"
 end
 
-function Core:waitForCash(targetText, isLocked, label)
+function Core:waitForCash(targetText, isLocked, label, name)
 	if isLocked and not self:guardLock(isLocked) then
 		return false
 	end
@@ -1485,7 +1486,7 @@ function Core:waitForCash(targetText, isLocked, label)
 	local noclipConnection = self:startNoclip(isLocked)
 
 	self.state.midHeist = true
-	local outcome = self:runCashLoop(targetText, isLocked)
+	local outcome = self:runCashLoop(targetText, isLocked, name)
 	self.state.midHeist = false
 
 	self:stopNoclip(noclipConnection)
