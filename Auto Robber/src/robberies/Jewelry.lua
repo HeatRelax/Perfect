@@ -13,40 +13,38 @@ local function isBox(instance, folder)
 	return instance:IsA("BasePart") or instance:IsA("Model")
 end
 
-local function fireBoxes(folder, remote, times)
-	for _, child in ipairs(folder:GetChildren()) do
-		if isBox(child, folder) then
-			for _ = 1, times do
-				remote:FireServer(child, true)
-			end
-		end
+local function getBoxHp(box)
+	local hp = box and box:FindFirstChild("HP")
+	if hp and hp:IsA("IntValue") then
+		return hp.Value
 	end
+	return 1
 end
 
+-- Only boxes that still have health can pay out. The store restocks broken
+-- boxes after a short cooldown, so this list is rebuilt on every pass.
 local function collectBoxes(core, folder)
 	local boxes = {}
 	for _, child in ipairs(folder:GetChildren()) do
-		if isBox(child, folder) and core:getInstancePosition(child) then
+		if isBox(child, folder) and core:getInstancePosition(child) and getBoxHp(child) > 0 then
 			table.insert(boxes, child)
 		end
 	end
 	return boxes
 end
 
-local function nextBox(core, boxes, index)
-	if #boxes == 0 then
-		return nil, index
-	end
-
-	for offset = 0, #boxes - 1 do
-		local candidateIndex = ((index - 1 + offset) % #boxes) + 1
-		local box = boxes[candidateIndex]
-		if box and box.Parent and core:getInstancePosition(box) then
-			return box, (candidateIndex % #boxes) + 1
+local function nearestBox(core, boxes, root)
+	local best, bestDistance
+	for _, box in ipairs(boxes) do
+		local position = core:getInstancePosition(box)
+		if position and root then
+			local distance = (position - root.Position).Magnitude
+			if not bestDistance or distance < bestDistance then
+				best, bestDistance = box, distance
+			end
 		end
 	end
-
-	return nil, index
+	return best, bestDistance
 end
 
 local function enterVent(core, isLocked)
@@ -120,13 +118,16 @@ local function farm(core, isLocked)
 		return false
 	end
 
-	local boxes = collectBoxes(core, folder)
 	local movement = core.settings.movement
 	local maxFarmSeconds = core.settings.timing.maxFarmSeconds
+	local debug = getgenv().MadCityAutoRobberDebugJewelry
 	local start = os.clock()
-	local index = 1
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
+
+	local lastBagValue
+	local lastBagChangeAt = os.clock()
+	local staleLimit = 10
 
 	while not core:hasCash(Jewelry.targetCash) do
 		if isLocked() or core:isDead() then
@@ -144,37 +145,78 @@ local function farm(core, isLocked)
 			end
 		end
 
-		if maxFarmSeconds and (os.clock() - start) >= maxFarmSeconds then
+		local elapsed = os.clock() - start
+		if maxFarmSeconds and elapsed >= maxFarmSeconds then
 			warn("Reached max farm time before hitting " .. Jewelry.targetCash)
 			break
 		end
 
-		core:setNoclip(true)
-		fireBoxes(folder, remote, movement.firesPerBox)
+		-- Read the bag first. If the round has already paid out everything it
+		-- can, the amount stays flat even while boxes are being broken.
+		local cashLabel = core.shared.getCashLabel()
+		local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
+		if bagValue and bagValue ~= lastBagValue then
+			lastBagValue = bagValue
+			lastBagChangeAt = os.clock()
+			if debug then
+				print("[JEWDBG] bag", bagValue, "at", string.format("%.1f", elapsed))
+			end
+		end
 
-		local box, nextIndex = nextBox(core, boxes, index)
-		index = nextIndex
+		local boxes = collectBoxes(core, folder)
+		if #boxes == 0 then
+			-- Everything is broken. Give the server a moment to finalize the
+			-- payout, then collect whatever the round awarded.
+			if debug then
+				print("[JEWDBG] no live boxes at", string.format("%.1f", elapsed))
+			end
+			task.wait(1.2)
+			break
+		end
+
+		local root = core:getRoot()
+		local box, distance = nearestBox(core, boxes, root)
 		if box then
 			local position = core:getInstancePosition(box)
 			if position and core:guard(isLocked) then
 				local target = position + Vector3.new(0, movement.boxYOffset, 0)
 				core:tweenTo(target, movement.boxTweenSpeed, isLocked)
 			end
+
+			-- Only boxes within reach accept the hit. Firing every box in the
+			-- store wasted network calls and made the farm take minutes.
+			local currentRoot = core:getRoot()
+			local fired = 0
+			for _, nearby in ipairs(collectBoxes(core, folder)) do
+				local nearbyPosition = core:getInstancePosition(nearby)
+				if nearbyPosition and currentRoot
+					and (nearbyPosition - currentRoot.Position).Magnitude <= 12 then
+					for _ = 1, movement.firesPerBox do
+						remote:FireServer(nearby, true)
+					end
+					fired += 1
+				end
+			end
+
+			if debug then
+				print("[JEWDBG] box", box.Name, "hp", getBoxHp(box), "dist",
+					distance and string.format("%.1f", distance) or "?", "fired", fired,
+					"at", string.format("%.1f", elapsed))
+			end
+
+			-- Let the hit register before choosing the next box.
+			local before = getBoxHp(box)
+			local hitDeadline = os.clock() + 0.75
+			while os.clock() < hitDeadline and getBoxHp(box) >= before do
+				core.services.runService.Heartbeat:Wait()
+			end
 		end
 
-		if isLocked() or core:isDead() then
-			core.state.midHeist = false
-			core:stopNoclip(noclipConnection)
-			core:rejoin()
-			return false
-		end
-
-		if core:hasCash(Jewelry.targetCash) then
+		if lastBagValue and lastBagValue > 0 and (os.clock() - lastBagChangeAt) >= staleLimit then
+			if debug then
+				print("[JEWDBG] bag flat at", lastBagValue, "for", staleLimit, "s")
+			end
 			break
-		end
-
-		if not core:hasOtherPlayers() and not isLocked() then
-			fireBoxes(folder, remote, movement.firesPerBox)
 		end
 
 		core.services.runService.Heartbeat:Wait()
