@@ -36,7 +36,7 @@ or panel. It applies:
 - **No Post Effects** — removes bloom, blur, depth of field, sky, and atmosphere.
 - **No Particles** — disables particle emitters, trails, beams, fire, and smoke.
 - **Low Terrain** — flattens water waves and reflections.
-- **Hide Roblox UI** — hides the topbar, chat, player list, and backpack.
+- **Hide Roblox UI** — hides the Roblox topbar, chat, player list, and backpack; the Auto Robber overlays stay visible.
 - **Unlock FPS** — raises the executor FPS cap.
 
 The Auto Robber stats HUD stays visible above the black overlay.
