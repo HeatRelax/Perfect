@@ -47,9 +47,22 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 A robbery only counts after its bag has been seen visible and below the new
 target, so a stale bag from the previous heist cannot skip the next one. When
 a bag runs out of loot before the doubled target (Jewelry caps at whatever the
-22 boxes hold, often around `$3800`), the game switches the bag label from
+round's boxes hold, often `$5,000`), the game switches the bag label from
 `Cash Reward` to `Robbery Success!`; the script accepts that signal and
 collects instead of waiting for the farm timeout.
+
+Two timers keep depleted servers from wasting a full farm cycle:
+
+- `bagAppearTimeout` (20s): if no bag appears, the robbery is still on the
+  server's loot cooldown, so it is skipped and the next robbery starts.
+- `bagStaleTimeout` (12s): if a visible bag stops growing below the target
+  (another player already took part of the round), the script collects the
+  capped amount instead of waiting for `maxFarmSeconds` (120s). Jewelry uses
+  its own 10s flat-bag exit inside the box farm.
+
+Both skips and capped collections are recorded in the event log, for example
+`No loot at Club (cooldown, skipped)` and
+`Bag capped at $3,000 at Bank (collected)`.
 
 ## Stats & Discord reports
 
