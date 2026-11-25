@@ -1000,6 +1000,12 @@ function Stats:recordRobbery(name, cash, duration)
 	cash = math.max(0, tonumber(cash) or 0)
 	duration = math.max(0, tonumber(duration) or 0)
 
+	-- A stale bag from an interrupted run, or a store another player already
+	-- emptied, can pay $0. Do not count those as completed robberies.
+	if cash <= 0 then
+		return
+	end
+
 	self.session.robberies += 1
 	self.run.robberies += 1
 	self.state.totalRobberies += 1
