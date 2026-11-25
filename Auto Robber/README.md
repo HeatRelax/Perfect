@@ -31,9 +31,11 @@ gray. The list updates automatically as players join, leave, or change teams.
 ## Camera and team switching
 
 The camera is locked to your character's humanoid every frame, so the game's
-loading and team-selection screens cannot pull it away. Team switching is
-skipped entirely when you are already on Criminals with a living character;
-otherwise the script asks the game for Criminals and waits for the respawn.
+loading and team-selection screens cannot pull it away. Criminals can no longer
+be selected directly, so the script switches to `Prisoners` when it needs a
+fresh respawn. It then teleports straight to the heist; committing the robbery
+promotes the character back to Criminals. A living character is sent to the
+heist without any extra respawn.
 
 All robbery cash targets are doubled for the global VIP 2x cash bonus:
 
@@ -269,7 +271,7 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 
 | Method | Purpose |
 | --- | --- |
-| `core:travel(destination, isLocked, label)` | switch team, respawn, noclip teleport |
+| `core:travel(destination, isLocked, label)` | respawn via Prisoners if needed, noclip teleport |
 | `core:collect(label)` | teleport to the cash spot and collect |
 | `core:waitForCash(target, isLocked, label)` | generic wait-until-cash flow |
 | `core:waitForSolo(isLocked, label)` | idle while other players are present |

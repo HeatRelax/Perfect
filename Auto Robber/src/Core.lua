@@ -291,7 +291,10 @@ function Core:isDead()
 	return humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead
 end
 
-function Core:setTeamToCriminals()
+-- Criminals can no longer be selected directly. Switching to Prisoners is
+-- accepted and forces a fresh respawn; the immediate heist teleport that
+-- follows promotes the character to Criminals again.
+function Core:setTeamToPrisoners()
 	local replicatedStorage = self.services.replicatedStorage
 	local remote = replicatedStorage:FindFirstChild("RemoteFunction") or replicatedStorage:WaitForChild("RemoteFunction", 15)
 	if not remote or not remote:IsA("RemoteFunction") then
@@ -300,10 +303,10 @@ function Core:setTeamToCriminals()
 	end
 
 	local ok, err = pcall(function()
-		remote:InvokeServer("SetTeam", "Criminals")
+		remote:InvokeServer("SetTeam", "Prisoners")
 	end)
 	if not ok then
-		warn("Failed to invoke SetTeam Criminals:", tostring(err))
+		warn("Failed to invoke SetTeam Prisoners:", tostring(err))
 		return false
 	end
 	return true
@@ -732,7 +735,7 @@ function Core:startCameraLock()
 		end
 
 		local player = self.services.players.LocalPlayer
-		if player and humanoid.Health > 0 and player.Team and player.Team.Name == "Criminals" then
+		if player and humanoid.Health > 0 then
 			local playerGui = player:FindFirstChild("PlayerGui")
 			local spawnGui = playerGui and playerGui:FindFirstChild("SpawnGUI")
 			if spawnGui and spawnGui:IsA("ScreenGui") and spawnGui.Enabled then
@@ -756,7 +759,7 @@ function Core:startCameraLock()
 	end
 end
 
-function Core:switchToCriminals(label)
+function Core:switchTeam(label)
 	if self.stopped then
 		return nil
 	end
@@ -767,8 +770,9 @@ function Core:switchToCriminals(label)
 	local previousCharacter = character
 	local previousAlive = humanoid ~= nil and humanoid.Health > 0
 
-	-- Already on Criminals with a living character: no need to respawn.
-	if previousAlive and player.Team and player.Team.Name == "Criminals" then
+	-- A living character can go straight to the heist. The robbery itself
+	-- promotes the Prisoners team to Criminals, so no extra respawn is needed.
+	if previousAlive and character and character.Parent and character:FindFirstChild("HumanoidRootPart") then
 		self.state.switchingTeam = false
 		self:bindDeath()
 		if label then
@@ -779,33 +783,29 @@ function Core:switchToCriminals(label)
 
 	self:setStep("Switching team & respawning...")
 	self.state.switchingTeam = true
-	self:setTeamToCriminals()
+	self:setTeamToPrisoners()
 
 	local deadline = os.clock() + 12
-	local teamDeadline = os.clock() + 6
-	local teamChanged = false
+	local retryAt = os.clock() + 6
 
 	while os.clock() < deadline do
 		player = self.shared.getPlayer()
 		character = player.Character
 		local currentHumanoid = character and character:FindFirstChildOfClass("Humanoid")
-		local onCriminals = player.Team ~= nil and player.Team.Name == "Criminals"
-		if onCriminals then
-			teamChanged = true
-		end
+		local freshCharacter = character ~= previousCharacter or not previousAlive
 
-		if onCriminals and character and character.Parent and currentHumanoid
+		if character and character.Parent and freshCharacter
+			and currentHumanoid
 			and currentHumanoid.Health > 0
 			and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Dead
-			and character:FindFirstChild("HumanoidRootPart")
-			and (character ~= previousCharacter or not previousAlive) then
+			and character:FindFirstChild("HumanoidRootPart") then
 			break
 		end
 
-		if os.clock() >= teamDeadline and not teamChanged then
+		if os.clock() >= retryAt then
 			-- The first SetTeam did not register; retry once.
-			self:setTeamToCriminals()
-			teamDeadline = os.clock() + 6
+			self:setTeamToPrisoners()
+			retryAt = os.clock() + 6
 		end
 
 		task.wait(0.05)
@@ -850,7 +850,7 @@ function Core:waitForSolo(isLocked, resumeLabel)
 	self.state.hiding = true
 	self:setStep("Player in server - idling...")
 	pcall(function()
-		self:setTeamToCriminals()
+		self:setTeamToPrisoners()
 	end)
 	task.wait(0.5)
 
@@ -1501,7 +1501,7 @@ function Core:travel(destination, isLocked, label)
 		return false
 	end
 
-	self:switchToCriminals(label)
+	self:switchTeam(label)
 	if not self:guard(isLocked) then
 		return false
 	end
