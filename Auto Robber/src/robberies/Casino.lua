@@ -82,6 +82,8 @@ local function farm(core, isLocked)
 
 	local start = os.clock()
 	local nextFire = os.clock() + core.settings.timing.leverRefire
+	local bagSeenAt = nil
+	local appearTimeout = core.settings.timing.bagAppearTimeout
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
 
@@ -99,6 +101,25 @@ local function farm(core, isLocked)
 				core:stopNoclip(noclipConnection)
 				return false
 			end
+		end
+
+		local statsHud = core.shared.getStatsHud()
+		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
+		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
+		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
+			and string.lower(stolenLabel.Text) or ""
+		local isSuccess = string.find(successText, "success", 1, true) ~= nil
+		if cashBagHud and cashBagHud.Visible and not isSuccess then
+			bagSeenAt = bagSeenAt or os.clock()
+		end
+
+		if appearTimeout and not bagSeenAt and (os.clock() - start) >= appearTimeout then
+			warn("No cash bag appeared for Casino - skipping")
+			if core.stats then
+				core.stats:recordEvent("No loot at Casino (cooldown, skipped)")
+			end
+			break
 		end
 
 		if os.clock() >= nextFire then
