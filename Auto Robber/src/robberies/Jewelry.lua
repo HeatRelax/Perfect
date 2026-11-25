@@ -139,7 +139,9 @@ local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
 	platform.Size = size
 	platform.CFrame = CFrame.new(center)
 	platform.Parent = workspace
-	return platform
+
+	local farmRootY = (minY or 0) + (yOffset or -6)
+	return platform, farmRootY
 end
 
 local function enterVent(core, isLocked)
@@ -195,7 +197,7 @@ local function enterVent(core, isLocked)
 	return false
 end
 
-local function farm(core, isLocked)
+local function farm(core, isLocked, existingPlatform, existingFarmRootY)
 	if not core:guardLock(isLocked) then
 		return false
 	end
@@ -240,9 +242,10 @@ local function farm(core, isLocked)
 	local yOffset = movement.boxYOffset
 
 	local firstBoxes = collectBoxes(core, folder)
-	local platform
-	if movement.jewelryPlatform ~= false and #firstBoxes > 0 then
-		local ok, created = pcall(
+	local platform = existingPlatform
+	local farmRootY = existingFarmRootY
+	if not platform and movement.jewelryPlatform ~= false and #firstBoxes > 0 then
+		local ok, created, createdRootY = pcall(
 			createFarmPlatform,
 			core,
 			firstBoxes,
@@ -251,15 +254,54 @@ local function farm(core, isLocked)
 			movement.jewelryPlatformThickness
 		)
 		if ok then
-			platform = created
+			platform, farmRootY = created, createdRootY
 		elseif debug then
 			warn("[JEWDBG] platform failed: " .. tostring(created))
 		end
 	end
 
+	if not farmRootY then
+		for _, box in ipairs(firstBoxes) do
+			local position = core:getInstancePosition(box)
+			local rootY = position and position.Y + (yOffset or -6)
+			if rootY and (not farmRootY or rootY < farmRootY) then
+				farmRootY = rootY
+			end
+		end
+	end
+
+	-- Noclip turns every character part non-collidable, so the slab cannot
+	-- catch the character while the farm runs. This heartbeat clamp keeps the
+	-- root at the farming height during any wait and makes falling impossible
+	-- even if collision is disabled.
+	local fallGuard
+	if farmRootY then
+		fallGuard = heartbeat:Connect(function()
+			if core.stopped then
+				return
+			end
+
+			local character = core.shared.getCharacter()
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if not root or root.Position.Y >= farmRootY - 0.05 then
+				return
+			end
+
+			local pivot = character:GetPivot()
+			local rotation = pivot - pivot.Position
+			character:PivotTo(CFrame.new(pivot.Position.X, farmRootY, pivot.Position.Z) * rotation)
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end
+
 	-- Every exit path shares the same cleanup so the platform can never be
 	-- left behind after the farm ends.
 	local function finish(result)
+		if fallGuard then
+			fallGuard:Disconnect()
+			fallGuard = nil
+		end
 		if platform and platform.Parent then
 			platform:Destroy()
 		end
@@ -337,13 +379,17 @@ local function farm(core, isLocked)
 
 		-- Defensive: recreate the platform if the game ever removes it.
 		if movement.jewelryPlatform ~= false and (not platform or not platform.Parent) then
-			platform = createFarmPlatform(
+			local ok, created, createdRootY = pcall(
+				createFarmPlatform,
 				core,
 				boxes,
 				yOffset,
 				movement.jewelryPlatformMargin,
 				movement.jewelryPlatformThickness
 			)
+			if ok and created then
+				platform, farmRootY = created, createdRootY
+			end
 		end
 
 		-- Skip boxes that broke since the tour was built.
@@ -445,28 +491,63 @@ end
 function Jewelry.run(core)
 	local isLocked = core:lockChecker(Jewelry.lockName, Jewelry.lockWhenMissing)
 	local timing = core.settings.timing
+	local movement = core.settings.movement
 
 	if not core:travel(Jewelry.destination, isLocked, "Teleporting to Jewelry...") then
 		return false
 	end
 
+	-- Build the slab before the vent wait. The travel pivot starts the
+	-- character above the store with collision enabled, so the slab catches
+	-- the drop instead of letting the character fall through the map.
+	local store = core.services.workspace:FindFirstChild("JewelryStore")
+	local folder = store and store:FindFirstChild("JewelryBoxes")
+	local boxes = folder and collectBoxes(core, folder) or {}
+	local platform
+	local farmRootY
+	if movement.jewelryPlatform ~= false and #boxes > 0 then
+		local ok, created, createdRootY = pcall(
+			createFarmPlatform,
+			core,
+			boxes,
+			movement.boxYOffset,
+			movement.jewelryPlatformMargin,
+			movement.jewelryPlatformThickness
+		)
+		if ok then
+			platform, farmRootY = created, createdRootY
+		end
+	end
+
+	local function cleanupPlatform()
+		if platform and platform.Parent then
+			platform:Destroy()
+		end
+		platform = nil
+	end
+
 	core:setNoclip(true)
 	if not enterVent(core, isLocked) then
+		cleanupPlatform()
 		core.state.midHeist = false
 		return false
 	end
 
 	core:setNoclip(false)
 	if not core:waitGuarded(timing.ventWait, isLocked, "Waiting at Jewelry vent...") then
+		cleanupPlatform()
 		core.state.midHeist = false
 		return false
 	end
 
-	if not farm(core, isLocked) then
+	if not farm(core, isLocked, platform, farmRootY) then
+		cleanupPlatform()
 		return false
 	end
 
-	return core:collect("Collecting Jewelry cash...")
+	local result = core:collect("Collecting Jewelry cash...")
+	cleanupPlatform()
+	return result
 end
 
 return Jewelry
