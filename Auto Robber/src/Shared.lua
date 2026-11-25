@@ -246,6 +246,15 @@ function Shared.getCashLabel()
 	return cash and cash:FindFirstChild("Amount")
 end
 
+-- Total cash shown in the main HUD. Unlike the cash bag label, this one keeps
+-- the player's full balance and does not reset when a robbery is collected.
+function Shared.getTotalCashLabel()
+	local statsHud = Shared.getStatsHud()
+	local cashHud = statsHud and statsHud:FindFirstChild("CashHUD")
+	local cash = cashHud and cashHud:FindFirstChild("Cash")
+	return cash and cash:FindFirstChild("Amount")
+end
+
 function Shared.hasCash(targetText)
 	local label = Shared.getCashLabel()
 	if not label or not label:IsA("TextLabel") then

@@ -857,7 +857,7 @@ function Stats:updateCash()
 	end
 
 	local ok, label = pcall(function()
-		return self.shared.getCashLabel()
+		return self.shared.getTotalCashLabel()
 	end)
 	if not ok or not label or not label:IsA("TextLabel") then
 		return

@@ -201,6 +201,7 @@ function Core:setStep(text)
 		if robberyName and self.state.currentRobbery ~= robberyName then
 			self.state.currentRobbery = robberyName
 			self.state.robberyStartedAt = os.clock()
+			self.stats:updateCash()
 			self.state.robberyStartCash = self.stats:getCash()
 		end
 	end
@@ -1352,8 +1353,23 @@ function Core:collect(label)
 	self.state.midHeist = false
 
 	if self.stats then
-		local cash = self.stats:getCash()
 		local startCash = self.state.robberyStartCash
+		self.stats:updateCash()
+		local cash = self.stats:getCash()
+
+		-- The HUD can update a fraction of a second after the collect teleport.
+		-- Give it a short chance to reflect the payout before recording.
+		if startCash and startCash > 0 and (not cash or cash <= startCash) then
+			for _ = 1, 5 do
+				task.wait(0.2)
+				self.stats:updateCash()
+				cash = self.stats:getCash()
+				if cash and cash > startCash then
+					break
+				end
+			end
+		end
+
 		local earned = 0
 		if startCash and startCash > 0 and cash and cash >= startCash then
 			earned = cash - startCash
