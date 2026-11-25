@@ -188,6 +188,7 @@ function Core.new(shared, performance, stats)
 	self.deathConnection = nil
 	self.characterAddedConnection = nil
 	self.cameraConnection = nil
+	self.noclipConnections = {}
 	self.stopped = false
 	return self
 end
@@ -694,6 +695,17 @@ function Core:stop()
 		self.cameraConnection:Disconnect()
 		self.cameraConnection = nil
 	end
+
+	-- A reload can stop a core while a noclip listener is still running.
+	-- Disconnect every listener so the old core cannot keep the shared
+	-- character non-collidable after the new one starts.
+	for connection in pairs(self.noclipConnections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	self.noclipConnections = {}
+	self:setNoclip(false)
 end
 
 function Core:startCameraLock()
@@ -1348,16 +1360,19 @@ function Core:createOverlay()
 end
 
 function Core:startNoclip(isLocked)
-	return self.services.runService.Stepped:Connect(function()
+	local connection = self.services.runService.Stepped:Connect(function()
 		if not self.shared.hasOtherPlayers() and not self:isDead() and not (isLocked and isLocked()) then
 			self:setNoclip(true)
 		end
 	end)
+	self.noclipConnections[connection] = true
+	return connection
 end
 
 function Core:stopNoclip(connection)
 	if connection then
 		connection:Disconnect()
+		self.noclipConnections[connection] = nil
 	end
 	self:setNoclip(false)
 end

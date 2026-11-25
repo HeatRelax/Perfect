@@ -119,9 +119,10 @@ of the live boxes while every live box is fired once per volley:
 The character farms a few studs below the store floor to stay out of sight. A
 transparent, anchored, client-only slab is created under the whole box area for
 the duration of the farm, so gravity cannot pull the character into the void and
-out of the boxes' event range. Fall velocity is also zeroed every frame. The
-slab is destroyed when the farm ends. Settings live in
-`Shared.settings.movement`:
+out of the boxes' event range. Fall velocity is also zeroed every frame, and a
+heartbeat clamp pins the root at the farming height during the vent wait and any
+pause — even while noclip has collision disabled. The slab is destroyed when the
+farm ends. Settings live in `Shared.settings.movement`:
 
 - `jewelryPlatform` (true) — enable the farm floor.
 - `jewelryPlatformMargin` (30) — extra studs around the box bounds.
