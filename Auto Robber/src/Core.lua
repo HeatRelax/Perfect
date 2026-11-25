@@ -1477,23 +1477,29 @@ function Core:collect(label)
 		local startCash = self.state.robberyStartCash
 		self.stats:updateCash()
 		local cash = self.stats:getCash()
+		local maxCash = cash
+		local lastChangeAt = os.clock()
+		local deadline = os.clock() + 6
 
-		-- The HUD can update a fraction of a second after the collect teleport.
-		-- Give it a short chance to reflect the payout before recording.
-		if startCash and startCash > 0 and (not cash or cash <= startCash) then
-			for _ = 1, 5 do
-				task.wait(0.2)
-				self.stats:updateCash()
-				cash = self.stats:getCash()
-				if cash and cash > startCash then
-					break
-				end
+		-- The cash HUD can update in several chunks after the collect
+		-- teleport. Wait for it to settle so the payout is not undercounted.
+		while os.clock() < deadline do
+			task.wait(0.2)
+			self.stats:updateCash()
+			cash = self.stats:getCash()
+			if cash and (not maxCash or cash > maxCash) then
+				maxCash = cash
+				lastChangeAt = os.clock()
+			end
+			if maxCash and startCash and maxCash > startCash
+				and (os.clock() - lastChangeAt) >= 1.2 then
+				break
 			end
 		end
 
 		local earned = 0
-		if startCash and startCash > 0 and cash and cash >= startCash then
-			earned = cash - startCash
+		if startCash and startCash > 0 and maxCash and maxCash >= startCash then
+			earned = maxCash - startCash
 		end
 		local duration = self.state.robberyStartedAt and (os.clock() - self.state.robberyStartedAt) or 0
 		self.stats:recordRobbery(robberyName, earned, duration)
