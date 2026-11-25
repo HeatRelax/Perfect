@@ -118,19 +118,28 @@ for _, robberyName in ipairs(Shared.settings.robberyOrder) do
 	table.insert(robberies, loadModule("src/robberies/" .. robberyName, "run"))
 end
 
-local core = Core.new(Shared, Performance)
-
-local dryRun = false
+local env
 if type(getgenv) == "function" then
-	local ok, env = pcall(getgenv)
-	if ok and type(env) == "table" then
-		dryRun = env.MadCityAutoRobberDryRun == true
+	local ok, result = pcall(getgenv)
+	if ok and type(result) == "table" then
+		env = result
 	end
 end
 
+local core = Core.new(Shared, Performance)
+
+local dryRun = env and env.MadCityAutoRobberDryRun == true
 if dryRun then
 	print("[Auto Robber] dry run: loaded " .. #robberies .. " robberies at " .. tostring(commitSha or "latest"))
 	return
+end
+
+if env then
+	local previousCore = env.MadCityAutoRobberCore
+	if previousCore and previousCore ~= core and type(previousCore.stop) == "function" then
+		pcall(previousCore.stop, previousCore)
+	end
+	env.MadCityAutoRobberCore = core
 end
 
 local Stats = loadModule("src/Stats", "new")
@@ -138,7 +147,24 @@ local stats = Stats.new(Shared)
 core.stats = stats
 stats:start()
 
+local function clearTeleportQueue()
+	if type(clearteleportqueue) == "function" then
+		pcall(clearteleportqueue)
+		return true
+	end
+	if type(clear_teleport_queue) == "function" then
+		pcall(clear_teleport_queue)
+		return true
+	end
+	if type(clearqueueonteleport) == "function" then
+		pcall(clearqueueonteleport)
+		return true
+	end
+	return false
+end
+
 if type(queue_on_teleport) == "function" then
+	clearTeleportQueue()
 	local url = mainUrl .. "?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	queue_on_teleport(("loadstring(game:HttpGet(%q))()"):format(url))
 end

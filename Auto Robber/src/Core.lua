@@ -189,6 +189,7 @@ function Core.new(shared, performance, stats)
 	self.deathConnection = nil
 	self.characterAddedConnection = nil
 	self.cameraConnection = nil
+	self.stopped = false
 	return self
 end
 
@@ -696,6 +697,14 @@ function Core:bindDeath()
 	self.characterAddedConnection = player.CharacterAdded:Connect(hook)
 end
 
+function Core:stop()
+	self.stopped = true
+	if self.cameraConnection then
+		self.cameraConnection:Disconnect()
+		self.cameraConnection = nil
+	end
+end
+
 function Core:startCameraLock()
 	if self.cameraConnection then
 		self.cameraConnection:Disconnect()
@@ -703,6 +712,10 @@ function Core:startCameraLock()
 	end
 
 	local function enforce()
+		if self.stopped then
+			return
+		end
+
 		local camera = self.services.workspace.CurrentCamera
 		if not camera then
 			return
@@ -747,6 +760,10 @@ function Core:startCameraLock()
 end
 
 function Core:switchToCriminals(label)
+	if self.stopped then
+		return nil
+	end
+
 	local player = self.shared.getPlayer()
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -817,6 +834,9 @@ function Core:antiAfk()
 end
 
 function Core:waitForSolo(isLocked, resumeLabel)
+	if self.stopped then
+		return false
+	end
 	if not self.shared.hasOtherPlayers() then
 		return true
 	end
@@ -845,7 +865,7 @@ function Core:waitForSolo(isLocked, resumeLabel)
 	local idleStart = os.clock()
 	local lastNudge = os.clock()
 
-	while self.shared.hasOtherPlayers() do
+	while not self.stopped and self.shared.hasOtherPlayers() do
 		if self.state.midHeist then
 			local character = self.shared.getCharacter()
 			local root = character and self.shared.getRoot()
@@ -898,6 +918,9 @@ function Core:guardLock(isLocked)
 end
 
 function Core:guard(isLocked)
+	if self.stopped then
+		return false
+	end
 	if isLocked and not self:guardLock(isLocked) then
 		return false
 	end
@@ -1353,7 +1376,7 @@ end
 
 function Core:runCashLoop(targetText, isLocked)
 	local start = os.clock()
-	while not self:hasCash(targetText) do
+	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
 			return "fail"
@@ -1380,6 +1403,9 @@ function Core:runCashLoop(targetText, isLocked)
 		end
 
 		task.wait(0.2)
+	end
+	if self.stopped then
+		return "fail"
 	end
 	return "target"
 end
@@ -1480,6 +1506,9 @@ function Core:collect(label)
 end
 
 function Core:start()
+	if self.stopped then
+		return
+	end
 	self:startCameraLock()
 	self:watchForDisconnects()
 	self:waitForGame()
