@@ -1393,7 +1393,10 @@ end
 function Core:runCashLoop(targetText, isLocked)
 	local start = os.clock()
 	local bagSeenAt = nil
+	local lastBagValue
+	local lastBagChangeAt = os.clock()
 	local appearTimeout = self.settings.timing.bagAppearTimeout
+	local staleLimit = self.settings.timing.bagStaleTimeout
 	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
@@ -1418,6 +1421,7 @@ function Core:runCashLoop(targetText, isLocked)
 		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
 		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
 		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
+		local label = self.shared.getCashLabel()
 		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
 			and string.lower(stolenLabel.Text) or ""
 		local isSuccess = string.find(successText, "success", 1, true) ~= nil
@@ -1429,6 +1433,28 @@ function Core:runCashLoop(targetText, isLocked)
 			warn("No cash bag appeared for " .. targetText .. " - skipping")
 			if self.stats then
 				self.stats:recordEvent("No loot at " .. targetText .. " (cooldown, skipped)")
+			end
+			return "timeout"
+		end
+
+		-- Another player can empty part of a round, leaving this bag capped
+		-- below the doubled target. Collect once the amount stops growing.
+		local bagValue = cashBagHud and cashBagHud.Visible and label
+			and self.shared.parseCash(label.Text) or nil
+		if bagValue and bagValue ~= lastBagValue then
+			lastBagValue = bagValue
+			lastBagChangeAt = os.clock()
+		end
+
+		if staleLimit and lastBagValue and lastBagValue > 0
+			and (os.clock() - lastBagChangeAt) >= staleLimit then
+			warn("Cash bag stopped growing for " .. targetText .. " - collecting")
+			if self.stats then
+				self.stats:recordEvent(string.format(
+					"Bag capped at %s for %s (collected)",
+					self.shared.formatCash(label.Text),
+					targetText
+				))
 			end
 			return "timeout"
 		end
