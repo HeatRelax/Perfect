@@ -44,6 +44,9 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 | Club | `$12000` |
 | Jewelry | `$10000` |
 
+A robbery only counts after its bag has been seen visible and below the new
+target, so a stale bag from the previous heist cannot skip the next one.
+
 ## Stats & Discord reports
 
 The Auto Robber tracks a full run in the background and posts Discord embeds.

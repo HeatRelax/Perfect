@@ -182,6 +182,7 @@ function Core.new(shared, performance, stats)
 		currentRobbery = nil,
 		robberyStartedAt = nil,
 		robberyStartCash = nil,
+		cashWatch = nil,
 	}
 	self.stepText = "Starting..."
 	self.stepLabel = nil
@@ -197,11 +198,13 @@ function Core:setStep(text)
 		self.stepLabel.Text = "Step: " .. self.stepText
 	end
 
-	if self.stats then
-		local robberyName = self.stepText:match("^Robbing (%a+)")
-		if robberyName and self.state.currentRobbery ~= robberyName then
-			self.state.currentRobbery = robberyName
-			self.state.robberyStartedAt = os.clock()
+	local robberyName, targetText = self.stepText:match("^Robbing (%a+) %((%$[%d,]+)%)")
+	if robberyName and self.state.currentRobbery ~= robberyName then
+		self.state.currentRobbery = robberyName
+		self.state.robberyStartedAt = os.clock()
+		self.state.cashWatch = targetText and { target = targetText, armed = false } or nil
+
+		if self.stats then
 			self.stats:updateCash()
 			self.state.robberyStartCash = self.stats:getCash()
 		end
@@ -221,7 +224,29 @@ function Core:hasOtherPlayers()
 end
 
 function Core:hasCash(targetText)
-	return self.shared.hasCash(targetText)
+	local reached = self.shared.hasCash(targetText)
+	local watch = self.state.cashWatch
+
+	if not watch or watch.target ~= targetText then
+		return reached
+	end
+
+	if not watch.armed then
+		local statsHud = self.shared.getStatsHud()
+		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+		local label = self.shared.getCashLabel()
+		local value = label and self.shared.parseCash(label.Text)
+		local target = self.shared.parseCash(targetText)
+
+		-- Only arm after the bag has been seen visible and below this
+		-- robbery's target. A stale bag from the previous heist can stay at
+		-- its old target for a moment, so hiding alone is not enough.
+		if cashBagHud and cashBagHud.Visible and value and target and value < target then
+			watch.armed = true
+		end
+	end
+
+	return reached and watch.armed
 end
 
 function Core:getInstancePosition(instance)
@@ -694,6 +719,15 @@ function Core:startCameraLock()
 		end
 		if camera.CameraSubject ~= humanoid then
 			camera.CameraSubject = humanoid
+		end
+
+		local player = self.services.players.LocalPlayer
+		if player and humanoid.Health > 0 and player.Team and player.Team.Name == "Criminals" then
+			local playerGui = player:FindFirstChild("PlayerGui")
+			local spawnGui = playerGui and playerGui:FindFirstChild("SpawnGUI")
+			if spawnGui and spawnGui:IsA("ScreenGui") and spawnGui.Enabled then
+				spawnGui.Enabled = false
+			end
 		end
 	end
 
@@ -1319,7 +1353,7 @@ end
 
 function Core:runCashLoop(targetText, isLocked)
 	local start = os.clock()
-	while not self.shared.hasCash(targetText) do
+	while not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
 			return "fail"
