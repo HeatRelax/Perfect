@@ -20,11 +20,29 @@ src/
 
 The overlay shows the live cash, level, XP, and current step. Cash is expanded
 and comma-formatted, so both `$10342575` and `$10M` display as an exact amount
-such as `$10,342,575`.
+such as `$10,342,575`. The overlay and Discord reports use the total balance
+(`CashHUD.Cash.Amount`); robbery completion watches the cash bag
+(`CashBagHUD.Cash.Amount`) while it is visible.
 
 Below the stats panel, a player list shows every player in the server. Each
 name is colored with that player's team color; players without a team appear
 gray. The list updates automatically as players join, leave, or change teams.
+
+## Camera and team switching
+
+The camera is locked to your character's humanoid every frame, so the game's
+loading and team-selection screens cannot pull it away. Team switching is
+skipped entirely when you are already on Criminals with a living character;
+otherwise the script asks the game for Criminals and waits for the respawn.
+
+All robbery cash targets are doubled for the global VIP 2x cash bonus:
+
+| Robbery | Target |
+| --- | --- |
+| Bank | `$6000` |
+| Casino | `$8000` |
+| Club | `$12000` |
+| Jewelry | `$10000` |
 
 ## Stats & Discord reports
 
@@ -216,7 +234,7 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | `core:guardLock(isLocked)` | heist-open check only |
 | `core:tweenTo(position, speed, isLocked)` | smooth movement |
 | `core:startNoclip(isLocked)` / `core:stopNoclip(conn)` | noclip pump |
-| `core:hasCash(target)` | reads the cash HUD |
+| `core:hasCash(target)` | reads the cash bag HUD (`CashBagHUD.Cash.Amount`) |
 | `core:lockChecker(name, lockWhenMissing)` | builds a heist lock checker |
 | `core:setStep(label)` | updates the overlay status |
 | `core:rejoin()` | rejoin the same server |

@@ -1,7 +1,7 @@
 local Bank = {
 	name = "Bank",
 	destination = Vector3.new(763, 1, 479),
-	targetCash = "$3000",
+	targetCash = "$6000",
 	lockName = "Bank",
 	lockWhenMissing = true,
 }

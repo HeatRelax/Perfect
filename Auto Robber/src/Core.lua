@@ -187,6 +187,7 @@ function Core.new(shared, performance, stats)
 	self.stepLabel = nil
 	self.deathConnection = nil
 	self.characterAddedConnection = nil
+	self.cameraConnection = nil
 	return self
 end
 
@@ -670,35 +671,95 @@ function Core:bindDeath()
 	self.characterAddedConnection = player.CharacterAdded:Connect(hook)
 end
 
+function Core:startCameraLock()
+	if self.cameraConnection then
+		self.cameraConnection:Disconnect()
+		self.cameraConnection = nil
+	end
+
+	local function enforce()
+		local camera = self.services.workspace.CurrentCamera
+		if not camera then
+			return
+		end
+
+		local character = self.shared.getCharacter()
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			return
+		end
+
+		if camera.CameraType ~= Enum.CameraType.Custom then
+			camera.CameraType = Enum.CameraType.Custom
+		end
+		if camera.CameraSubject ~= humanoid then
+			camera.CameraSubject = humanoid
+		end
+	end
+
+	enforce()
+	self.cameraConnection = self.services.runService.RenderStepped:Connect(enforce)
+
+	if type(getgenv) == "function" then
+		local ok, env = pcall(getgenv)
+		if ok and type(env) == "table" then
+			local previous = env.MadCityAutoRobberCameraConnection
+			if previous and previous ~= self.cameraConnection and type(previous.Disconnect) == "function" then
+				pcall(previous.Disconnect, previous)
+			end
+			env.MadCityAutoRobberCameraConnection = self.cameraConnection
+		end
+	end
+end
+
 function Core:switchToCriminals(label)
-	local previousCharacter = self.shared.getCharacter()
+	local player = self.shared.getPlayer()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local previousCharacter = character
+	local previousAlive = humanoid ~= nil and humanoid.Health > 0
+
+	-- Already on Criminals with a living character: no need to respawn.
+	if previousAlive and player.Team and player.Team.Name == "Criminals" then
+		self.state.switchingTeam = false
+		self:bindDeath()
+		if label then
+			self:setStep(label)
+		end
+		return character
+	end
+
 	self:setStep("Switching team & respawning...")
 	self.state.switchingTeam = true
 	self:setTeamToCriminals()
 
-	local player = self.shared.getPlayer()
-	local deadline = os.clock() + 20
-	local character = player.Character
-
-	if previousCharacter and character == previousCharacter then
-		while os.clock() < deadline do
-			character = player.Character
-			if character and character ~= previousCharacter and character.Parent then
-				break
-			end
-			task.wait(0.05)
-		end
-	end
+	local deadline = os.clock() + 12
+	local teamDeadline = os.clock() + 6
+	local teamChanged = false
 
 	while os.clock() < deadline do
+		player = self.shared.getPlayer()
 		character = player.Character
-		if character and character.Parent then
-			local humanoid = character:FindFirstChildOfClass("Humanoid")
-			local root = character:FindFirstChild("HumanoidRootPart")
-			if humanoid and root and humanoid.Health > 0 then
-				break
-			end
+		local currentHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local onCriminals = player.Team ~= nil and player.Team.Name == "Criminals"
+		if onCriminals then
+			teamChanged = true
 		end
+
+		if onCriminals and character and character.Parent and currentHumanoid
+			and currentHumanoid.Health > 0
+			and currentHumanoid:GetState() ~= Enum.HumanoidStateType.Dead
+			and character:FindFirstChild("HumanoidRootPart")
+			and (character ~= previousCharacter or not previousAlive) then
+			break
+		end
+
+		if os.clock() >= teamDeadline and not teamChanged then
+			-- The first SetTeam did not register; retry once.
+			self:setTeamToCriminals()
+			teamDeadline = os.clock() + 6
+		end
+
 		task.wait(0.05)
 	end
 
@@ -1385,6 +1446,7 @@ function Core:collect(label)
 end
 
 function Core:start()
+	self:startCameraLock()
 	self:watchForDisconnects()
 	self:waitForGame()
 	self:createOverlay()

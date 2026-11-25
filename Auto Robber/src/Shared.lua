@@ -256,10 +256,23 @@ function Shared.getTotalCashLabel()
 end
 
 function Shared.hasCash(targetText)
+	local statsHud = Shared.getStatsHud()
+	local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+	if not cashBagHud or not cashBagHud.Visible then
+		return false
+	end
+
 	local label = Shared.getCashLabel()
 	if not label or not label:IsA("TextLabel") then
 		return false
 	end
+
+	local value = Shared.parseCash(label.Text)
+	local target = Shared.parseCash(targetText)
+	if value and target then
+		return value >= target
+	end
+
 	return (string.gsub(label.Text, "%s+", "")) == targetText
 end
 

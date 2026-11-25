@@ -1,7 +1,7 @@
 local Jewelry = {
 	name = "Jewelry",
 	destination = Vector3.new(-77, 120, 813),
-	targetCash = "$5000",
+	targetCash = "$10000",
 	lockName = "Jewel",
 	lockWhenMissing = false,
 }
