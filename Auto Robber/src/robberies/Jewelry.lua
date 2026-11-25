@@ -67,6 +67,81 @@ local function buildTour(core, boxes, origin)
 	return tour
 end
 
+local PLATFORM_NAME = "MadCityAutoRobberJewelryFloor"
+
+-- The farm runs a few studs below the store floor so the character stays out
+-- of sight. Nothing solid is down there, so gravity slowly drags the character
+-- into the void between pivot steps and the boxes leave event range. This
+-- transparent, anchored, client-only slab spans the whole store and stands the
+-- character at the exact farming height for the entire run.
+local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
+	local workspace = core.services.workspace
+	local minX, maxX, minY, maxY, minZ, maxZ
+
+	for _, box in ipairs(boxes) do
+		local position = core:getInstancePosition(box)
+		if position then
+			minX = minX and math.min(minX, position.X) or position.X
+			maxX = maxX and math.max(maxX, position.X) or position.X
+			minY = minY and math.min(minY, position.Y) or position.Y
+			maxY = maxY and math.max(maxY, position.Y) or position.Y
+			minZ = minZ and math.min(minZ, position.Z) or position.Z
+			maxZ = maxZ and math.max(maxZ, position.Z) or position.Z
+		end
+	end
+
+	if not minX or not maxX or not minZ or not maxZ then
+		return nil
+	end
+
+	local humanoid = core.shared.getHumanoid()
+	local hipHeight = humanoid and humanoid.HipHeight or 2
+	if not hipHeight or hipHeight <= 0 then
+		hipHeight = 2
+	end
+
+	local root = core:getRoot()
+	local rootHalfHeight = root and root.Size.Y / 2 or 1
+
+	thickness = math.max(1, thickness or 2)
+	margin = math.max(0, margin or 30)
+
+	-- A standing character's feet sit HipHeight + half the root height below
+	-- the root centre. Put the slab top exactly there so the farming height
+	-- stays identical to the pivot goal.
+	local feetDrop = hipHeight + rootHalfHeight
+	local topY = (minY or 0) + (yOffset or -6) - feetDrop - 0.05
+	local center = Vector3.new(
+		(minX + maxX) / 2,
+		topY - thickness / 2,
+		(minZ + maxZ) / 2
+	)
+	local size = Vector3.new(
+		(maxX - minX) + margin * 2,
+		thickness,
+		(maxZ - minZ) + margin * 2
+	)
+
+	local existing = workspace:FindFirstChild(PLATFORM_NAME)
+	if existing then
+		existing:Destroy()
+	end
+
+	local platform = Instance.new("Part")
+	platform.Name = PLATFORM_NAME
+	platform.Anchored = true
+	platform.CanCollide = true
+	platform.CanTouch = false
+	platform.CanQuery = false
+	platform.CastShadow = false
+	platform.Transparency = 1
+	platform.Material = Enum.Material.SmoothPlastic
+	platform.Size = size
+	platform.CFrame = CFrame.new(center)
+	platform.Parent = workspace
+	return platform
+end
+
 local function enterVent(core, isLocked)
 	if not core:guard(isLocked) then
 		return false
@@ -164,29 +239,54 @@ local function farm(core, isLocked)
 	local slowRadius = movement.jewelrySlowRadius or 8
 	local yOffset = movement.boxYOffset
 
+	local firstBoxes = collectBoxes(core, folder)
+	local platform
+	if movement.jewelryPlatform ~= false and #firstBoxes > 0 then
+		local ok, created = pcall(
+			createFarmPlatform,
+			core,
+			firstBoxes,
+			yOffset,
+			movement.jewelryPlatformMargin,
+			movement.jewelryPlatformThickness
+		)
+		if ok then
+			platform = created
+		elseif debug then
+			warn("[JEWDBG] platform failed: " .. tostring(created))
+		end
+	end
+
+	-- Every exit path shares the same cleanup so the platform can never be
+	-- left behind after the farm ends.
+	local function finish(result)
+		if platform and platform.Parent then
+			platform:Destroy()
+		end
+		platform = nil
+		core.state.midHeist = false
+		core:stopNoclip(noclipConnection)
+		return result
+	end
+
 	while not core:hasCash(Jewelry.targetCash) do
 		-- Heartbeat gives this loop a frame delta for smooth, continuous
 		-- movement while the event volleys run at their own interval.
 		local dt = math.min(heartbeat:Wait(), 0.1)
 
 		if core.stopped then
-			core.state.midHeist = false
-			core:stopNoclip(noclipConnection)
-			return false
+			return finish(false)
 		end
 
 		if isLocked() or core:isDead() then
-			core.state.midHeist = false
-			core:stopNoclip(noclipConnection)
+			finish(false)
 			core:rejoin()
 			return false
 		end
 
 		if core:hasOtherPlayers() then
 			if not core:waitForSolo(isLocked, label) then
-				core.state.midHeist = false
-				core:stopNoclip(noclipConnection)
-				return false
+				return finish(false)
 			end
 			core:setStep(label)
 		end
@@ -227,6 +327,23 @@ local function farm(core, isLocked)
 		if not root then
 			task.wait(0.05)
 			continue
+		end
+
+		-- The platform stands the character up, but gravity still applies
+		-- between pivot steps, so zero the fall velocity every frame. Any
+		-- missed step then produces a tiny drop instead of a freefall.
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+
+		-- Defensive: recreate the platform if the game ever removes it.
+		if movement.jewelryPlatform ~= false and (not platform or not platform.Parent) then
+			platform = createFarmPlatform(
+				core,
+				boxes,
+				yOffset,
+				movement.jewelryPlatformMargin,
+				movement.jewelryPlatformThickness
+			)
 		end
 
 		-- Skip boxes that broke since the tour was built.
@@ -322,9 +439,7 @@ local function farm(core, isLocked)
 		end
 	end
 
-	core.state.midHeist = false
-	core:stopNoclip(noclipConnection)
-	return not core:isDead() and not isLocked()
+	return finish(not core:isDead() and not isLocked())
 end
 
 function Jewelry.run(core)

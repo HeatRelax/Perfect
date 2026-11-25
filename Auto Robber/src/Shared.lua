@@ -46,6 +46,13 @@ Shared.settings = {
 		jewelryMinSpeed = 12,
 		jewelrySlowRadius = 8,
 		jewelryVolleyInterval = 0.15,
+
+		-- Jewelry farms a few studs below the store floor. A transparent,
+		-- client-only slab under the boxes stops gravity from pulling the
+		-- character out of event range between pivot steps.
+		jewelryPlatform = true,
+		jewelryPlatformMargin = 30,
+		jewelryPlatformThickness = 2,
 	},
 
 	miniHeists = {

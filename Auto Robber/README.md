@@ -116,6 +116,17 @@ of the live boxes while every live box is fired once per volley:
 - `movement.jewelryMinSpeed` (12) — minimum approach speed near a box.
 - `movement.jewelrySlowRadius` (8) — distance at which movement starts slowing.
 
+The character farms a few studs below the store floor to stay out of sight. A
+transparent, anchored, client-only slab is created under the whole box area for
+the duration of the farm, so gravity cannot pull the character into the void and
+out of the boxes' event range. Fall velocity is also zeroed every frame. The
+slab is destroyed when the farm ends. Settings live in
+`Shared.settings.movement`:
+
+- `jewelryPlatform` (true) — enable the farm floor.
+- `jewelryPlatformMargin` (30) — extra studs around the box bounds.
+- `jewelryPlatformThickness` (2) — slab thickness.
+
 The server registers at most one hit per box per volley and only for boxes near
 the player. Firing every box means the closest cluster breaks while the
 character is already moving to the next stop; boxes outside hit range ignore
