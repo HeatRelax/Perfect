@@ -84,6 +84,9 @@ local function farm(core, isLocked)
 	local nextFire = os.clock() + core.settings.timing.leverRefire
 	local bagSeenAt = nil
 	local appearTimeout = core.settings.timing.bagAppearTimeout
+	local lastBagValue
+	local lastBagChangeAt = os.clock()
+	local staleLimit = core.settings.timing.bagStaleTimeout
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
 
@@ -118,6 +121,28 @@ local function farm(core, isLocked)
 			warn("No cash bag appeared for Casino - skipping")
 			if core.stats then
 				core.stats:recordEvent("No loot at Casino (cooldown, skipped)")
+			end
+			break
+		end
+
+		-- Another player can empty part of a round, leaving this bag capped
+		-- below the doubled target. Collect once the amount stops growing.
+		local label = core.shared.getCashLabel()
+		local bagValue = cashBagHud and cashBagHud.Visible and not isSuccess and label
+			and core.shared.parseCash(label.Text) or nil
+		if bagValue and bagValue ~= lastBagValue then
+			lastBagValue = bagValue
+			lastBagChangeAt = os.clock()
+		end
+
+		if staleLimit and lastBagValue and lastBagValue > 0
+			and (os.clock() - lastBagChangeAt) >= staleLimit then
+			warn("Cash bag stopped growing for Casino - collecting")
+			if core.stats then
+				core.stats:recordEvent(string.format(
+					"Bag capped at %s at Casino (collected)",
+					core.shared.formatCash(label.Text)
+				))
 			end
 			break
 		end
