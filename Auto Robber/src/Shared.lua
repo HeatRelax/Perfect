@@ -69,18 +69,8 @@ Shared.settings = {
 	stats = {
 		enabled = true,
 
-		-- The webhook is never hard-coded. It is read from this file inside the
-		-- executor workspace. The file may contain a plain URL or an encoded
-		-- "MAD1:<hex>" value created with getgenv().MadCityAutoRobberEncodeWebhook.
-		webhookFile = "MadCityAutoRobberWebhook.txt",
-		webhookUsername = "Mad City Auto Robber",
-
-		reportInterval = 300,
-		startupDelay = 10,
-		minSendInterval = 5,
-		flushTimeout = 3,
+		-- How often progress is written to the executor workspace (seconds).
 		persistInterval = 30,
-		topPlayers = 5,
 		maxEvents = 20,
 		resumeWindow = 600,
 	},

@@ -362,7 +362,7 @@ function Core:rejoin(reason)
 	end
 
 	if self.stats then
-		self.stats:flush("rejoin", { reason = reason or "flow" })
+		self.stats:flush()
 	end
 
 	-- Suppress the disconnect watcher for this intentional rejoin.
@@ -447,11 +447,7 @@ function Core:handleDisconnect(reason, code)
 
 	if self.stats then
 		self.stats:recordDisconnect(codeName, message, true)
-		self.stats:flush("disconnect", {
-			force = true,
-			reason = codeName,
-			message = message,
-		})
+		self.stats:flush()
 	end
 
 	task.spawn(function()
@@ -573,12 +569,7 @@ function Core:watchForDisconnects()
 			))
 			if self.stats then
 				self.stats:recordDisconnect(formatErrorName(code), message, false)
-				self.stats:flush("disconnect", {
-					force = true,
-					reason = formatErrorName(code),
-					message = tostring(message or ""),
-					permanent = true,
-				})
+				self.stats:flush()
 			end
 			return
 		end
