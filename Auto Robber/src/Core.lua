@@ -199,7 +199,9 @@ function Core:setStep(text)
 		self.stepLabel.Text = "Step: " .. self.stepText
 	end
 
-	local robberyName, targetText = self.stepText:match("^Robbing (%a+) %((%$[%d,]+)%)")
+	-- Matches both "Robbing Club ($12000)" and the newer
+	-- "Robbing Club ($12000, base $6000)" labels.
+	local robberyName, targetText = self.stepText:match("^Robbing (%a+) %((%$[%d,]+)")
 	if robberyName and self.state.currentRobbery ~= robberyName then
 		self.state.currentRobbery = robberyName
 		self.state.robberyStartedAt = os.clock()
