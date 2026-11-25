@@ -175,6 +175,11 @@ print("[Auto Robber] loaded " .. tostring(commitSha or "latest"))
 
 core:start()
 
+-- Mini heists are always the first sweep of a fresh cycle, before Jewelry.
+if not MiniHeists.run(core) then
+	return
+end
+
 for _, robbery in ipairs(robberies) do
 	if not robbery.run(core) then
 		return

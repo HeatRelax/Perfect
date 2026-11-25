@@ -87,7 +87,8 @@ Skips and capped collections are recorded in the event log, for example
 
 ## Mini heists
 
-After every robbery the script sweeps the ten `$500` cash pickups under
+After every robbery, and once at the start of each cycle before Jewelry, the
+script sweeps the ten `$500` cash pickups under
 `workspace.ObjectSelection.Cash`. Each pickup is a `Cash` model containing a
 `CashReward` IntValue and a `Cash` MeshPart whose `Cash` script exposes an
 `Event` RemoteEvent.
