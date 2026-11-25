@@ -3,7 +3,7 @@
 	Entry point. Host Main.lua next to src/, then run this file.
 ]]
 
-local baseUrl = "https://raw.githubusercontent.com/LuaSecurity/Perfect/refs/heads/main/Menu/"
+local baseUrl = "https://raw.githubusercontent.com/HeatRelax/Perfect/refs/heads/main/Menu/"
 
 -- Local testing hook: set getgenv().MadCityBaseUrl to a local server root.
 if type(getgenv) == "function" then
