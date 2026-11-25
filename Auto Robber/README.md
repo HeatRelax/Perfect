@@ -158,9 +158,14 @@ kicked or loses its connection, it:
 - shows `Connection lost - rejoining...`, `Kicked - rejoining...`, or a similar
   message in the stats HUD;
 - logs the full error code and message to the executor console;
-- waits one second, then tries to teleport back to the same server;
-- if that fails, teleports to a new server for the same place;
+- waits one second, then rejoins the **same private server** using its private
+  server code (falling back to the same job instance);
 - retries up to four times with a short delay between attempts.
+
+This script is designed for a private/solo server. Every rejoin path stays on
+that private server; it never falls back to a public server. If the private
+server cannot be re-entered, the HUD shows `Same-server rejoin failed - rejoin
+manually` instead of silently moving to a public server.
 
 The watcher listens to both `GuiService.ErrorMessageChanged` and the
 `RobloxPromptGui.promptOverlay` error prompt, so it still works if one signal is
@@ -170,8 +175,8 @@ server kick. It also ignores `DisconnectClientRequest`, which is what an
 intentional leave looks like.
 
 The Auto Robber's own `core:rejoin()` flow sets an internal `rejoining` /
-`teleporting` guard before it kicks or teleports, so the watcher never treats
-its own rejoin as an accidental disconnect.
+`teleporting` guard before it teleports, so the watcher never treats its own
+rejoin as an accidental disconnect.
 
 Limitations: this runs inside the Roblox client. If the client process crashes,
 hangs, or is closed, Lua stops running and nothing can rejoin. If the internet is
