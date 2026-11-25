@@ -6,7 +6,7 @@
 Main.lua                  entry point (the executor only loads this)
 src/
   Shared.lua              services, settings, game primitives, cash formatting
-  Core.lua                flow engine (travel, guards, idling, HUD, rejoin)
+  Core.lua                flow engine (travel, guards, idling, HUD, rejoin, disconnect recovery)
   Performance.lua         automatic max-FPS / black-screen boost
   robberies/
     Jewelry.lua
@@ -24,6 +24,36 @@ such as `$10,342,575`.
 Below the stats panel, a player list shows every player in the server. Each
 name is colored with that player's team color; players without a team appear
 gray. The list updates automatically as players join, leave, or change teams.
+
+## Disconnect recovery
+
+The Auto Robber watches for Roblox's disconnect/kick prompt. When the client is
+kicked or loses its connection, it:
+
+- shows `Connection lost - rejoining...`, `Kicked - rejoining...`, or a similar
+  message in the stats HUD;
+- logs the full error code and message to the executor console;
+- waits one second, then tries to teleport back to the same server;
+- if that fails, teleports to a new server for the same place;
+- retries up to four times with a short delay between attempts.
+
+The watcher listens to both `GuiService.ErrorMessageChanged` and the
+`RobloxPromptGui.promptOverlay` error prompt, so it still works if one signal is
+missed. `GuiService:GetErrorCode()` is used to ignore errors that a rejoin cannot
+fix, such as moderation, security checks, a wrong client version, or a private
+server kick. It also ignores `DisconnectClientRequest`, which is what an
+intentional leave looks like.
+
+The Auto Robber's own `core:rejoin()` flow sets an internal `rejoining` /
+`teleporting` guard before it kicks or teleports, so the watcher never treats
+its own rejoin as an accidental disconnect.
+
+Limitations: this runs inside the Roblox client. If the client process crashes,
+hangs, or is closed, Lua stops running and nothing can rejoin. If the internet is
+completely down, the teleport calls will keep failing until it returns; the
+script gives up after four attempts and leaves `Reconnect failed - rejoin
+manually` in the HUD. A Roblox-wide outage or a moderation ban cannot be bypassed
+by rejoining.
 
 ## FPS boost
 

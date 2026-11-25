@@ -1,6 +1,7 @@
 local players = game:GetService("Players")
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local coreGui = game:GetService("CoreGui")
+local guiService = game:GetService("GuiService")
 local workspace = game:GetService("Workspace")
 local runService = game:GetService("RunService")
 local teleportService = game:GetService("TeleportService")
@@ -15,6 +16,7 @@ Shared.services = {
 	players = players,
 	replicatedStorage = replicatedStorage,
 	coreGui = coreGui,
+	guiService = guiService,
 	workspace = workspace,
 	runService = runService,
 	teleportService = teleportService,
@@ -51,6 +53,12 @@ Shared.settings = {
 	rejoin = {
 		delay = 0.5,
 		queueHandler = false,
+
+		-- Automatic recovery from unintentional kicks / disconnects.
+		kickFirstDelay = 1,
+		kickRetryDelay = 4,
+		kickTeleportTimeout = 12,
+		kickMaxAttempts = 4,
 	},
 }
 

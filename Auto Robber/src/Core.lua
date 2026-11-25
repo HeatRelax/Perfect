@@ -11,6 +11,135 @@ local function getQueueTeleportFn()
 	return nil
 end
 
+-- These are the disconnect reasons where teleporting back would only loop or
+-- fight the client. Everything else is treated as an accidental disconnect.
+local NO_REJOIN_ERROR_NAMES = {
+	-- Intentional / user-requested disconnects.
+	"DisconnectClientRequest",
+	"DisconnectDuplicatePlayer",
+	"DisconnectDuplicateTicket",
+	"DisconnectIllegalTeleport",
+
+	-- Client, security, account, or moderation problems a rejoin cannot fix.
+	"DisconnectSecurityKeyMismatch",
+	"DisconnectNewSecurityKeyMismatch",
+	"DisconnectProtocolMismatch",
+	"DisconnectBadhash",
+	"DisconnectWrongVersion",
+	"DisconnectBySecurityPolicy",
+	"DisconnectBlockedIP",
+	"DisconnectCloudEditKick",
+	"DisconnectModeratedGame",
+	"DisconnectVerboselyModeratedGame",
+	"DisconnectPrivateServerKickout",
+	"DisconnectCollaboratorPermissionRevoked",
+	"DisconnectCollaboratorUnderage",
+	"DisconnectCollaboratorNotAgeVerified",
+	"DisconnectCollaboratorTrustedConnectionsRequired",
+	"DisconnectCollaboratorOwnerActionRequired",
+	"DisconnectCollaboratorTooManyCollaborators",
+	"DisconnectCollaboratorUnknownError",
+	"DisconnectCollaboratorRequestedEviction",
+	"DisconnectCollaboratorTrustedConnectionsRequiredPC",
+	"DisconnectRemoteAttestationUnsupported",
+	"DisconnectRemoteAttestationGeneralFailure",
+	"DisconnectRemoteAttestationTimeout",
+	"DisconnectRemoteAttestationOSOutOfDate",
+	"DisconnectRemoteAttestationBootValidationFailure",
+	"ScreentimeLockoutKick",
+	"AndroidAnticheatKick",
+	"AndroidEmulatorKick",
+	"AndroidRootedKick",
+	"DisconnectRomarkEndOfTest",
+	"TeleportUnauthorized",
+
+	-- Permanent join errors.
+	"PlacelaunchDisabled",
+	"PlacelaunchRestricted",
+	"PlacelaunchUnauthorized",
+	"PlacelaunchUserPrivacyUnauthorized",
+	"PlacelaunchVipOwnerNotPresent",
+	"PlacelaunchAgeVerificationRequired",
+	"PlacelaunchParentalApprovalRequired",
+	"PlacelaunchCoreGated",
+	"PlacelaunchCollaborationCoreGated",
+	"PlacelaunchCreatorBan",
+	"PlacelaunchDeviceBlock",
+	"PlacelaunchCustomMessage",
+	"PlacelaunchOtherError",
+}
+
+local NO_REJOIN_ERRORS = {}
+for _, name in ipairs(NO_REJOIN_ERROR_NAMES) do
+	local ok, value = pcall(function()
+		return Enum.ConnectionError[name]
+	end)
+	if ok and value then
+		NO_REJOIN_ERRORS[value] = true
+	end
+end
+
+local function getDisconnectCode(guiService)
+	if not guiService then
+		return nil
+	end
+
+	local ok, code = pcall(function()
+		return guiService:GetErrorCode()
+	end)
+	if ok and typeof(code) == "EnumItem" then
+		return code
+	end
+	return nil
+end
+
+local function formatErrorName(code)
+	if not code then
+		return "Unknown"
+	end
+	return (tostring(code):gsub("^Enum%.ConnectionError%.", ""))
+end
+
+local function describeDisconnect(code)
+	local name = formatErrorName(code)
+	if name == "DisconnectConnectionLost"
+		or name == "DisconnectTransportIoInternetError"
+		or name == "NetworkTimeout" then
+		return "Connection lost"
+	end
+	if name == "DisconnectLuaKick" then
+		return "Kicked"
+	end
+	if name == "ServerShutdown" then
+		return "Server shut down"
+	end
+	if name == "DisconnectIdle" then
+		return "Idle disconnect"
+	end
+	if name == "DisconnectTimeout"
+		or name == "DisconnectHashTimeout"
+		or name == "ReplicatorTimeout" then
+		return "Connection timed out"
+	end
+	if name == "DisconnectModeratedGame"
+		or name == "DisconnectVerboselyModeratedGame" then
+		return "Moderated"
+	end
+	return "Disconnected"
+end
+
+local function readErrorPromptMessage(prompt)
+	if not prompt then
+		return ""
+	end
+
+	local label = prompt:FindFirstChild("ErrorMessage", true)
+	if label and (label:IsA("TextLabel") or label:IsA("TextButton")) then
+		return label.Text
+	end
+	return ""
+end
+
 local function attachOverlay(shared, gui)
 	gui.ResetOnSpawn = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -42,6 +171,9 @@ function Core.new(shared, performance)
 	self.performance = performance
 	self.state = {
 		rejoining = false,
+		teleporting = false,
+		kickHandling = false,
+		kickAttempts = 0,
 		switchingTeam = false,
 		hiding = false,
 		midHeist = false,
@@ -118,6 +250,19 @@ function Core:setTeamToCriminals()
 	return true
 end
 
+function Core:getTeleportData()
+	local character = self.shared.getCharacter()
+	if character then
+		local ok, pivot = pcall(function()
+			return character:GetPivot()
+		end)
+		if ok and pivot then
+			return pivot
+		end
+	end
+	return self.settings.finalCFrame
+end
+
 function Core:rejoin()
 	if self.state.rejoining then
 		return
@@ -126,8 +271,7 @@ function Core:rejoin()
 	self:setStep("Rejoining server...")
 
 	local player = self.shared.getPlayer()
-	local character = self.shared.getCharacter()
-	local teleportData = character and character:GetPivot() or self.settings.finalCFrame
+	local teleportData = self:getTeleportData()
 	local rejoinSettings = self.settings.rejoin
 
 	if rejoinSettings.queueHandler then
@@ -156,12 +300,248 @@ function Core:rejoin()
 		task.wait(rejoinSettings.delay)
 	end
 
+	-- Suppress the disconnect watcher for this intentional rejoin.
+	self.state.teleporting = true
+
 	if #self.services.players:GetPlayers() <= 1 or game.JobId == "" then
 		player:Kick("\nRejoining...")
 		task.wait(0.3)
 		self.services.teleportService:Teleport(game.PlaceId, player, teleportData)
 	else
 		self.services.teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
+	end
+end
+
+function Core:teleportBackToServer(preferSameServer)
+	local player = self.shared.getPlayer()
+	local teleportService = self.services.teleportService
+	local teleportData = self:getTeleportData()
+	local errors = {}
+
+	if preferSameServer and game.JobId ~= "" then
+		local ok, err = pcall(function()
+			teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
+		end)
+		if ok then
+			return true
+		end
+		table.insert(errors, tostring(err))
+	end
+
+	local ok, err = pcall(function()
+		teleportService:Teleport(game.PlaceId, player, teleportData)
+	end)
+	if ok then
+		return true
+	end
+	table.insert(errors, tostring(err))
+
+	warn("[Auto Robber] Reconnect teleport failed: " .. table.concat(errors, " | "))
+	return false
+end
+
+function Core:handleDisconnect(reason, code)
+	if self.state.rejoining or self.state.teleporting then
+		return
+	end
+	if self.state.kickHandling then
+		return
+	end
+
+	local rejoinSettings = self.settings.rejoin
+	local maxAttempts = rejoinSettings.kickMaxAttempts or 4
+	if self.state.kickAttempts >= maxAttempts then
+		self:setStep("Reconnect failed - rejoin manually")
+		return
+	end
+
+	local codeName = formatErrorName(code)
+	local message = tostring(reason or ""):gsub("%s+", " "):sub(1, 200)
+	if message == "" then
+		message = codeName
+	end
+
+	self.state.kickHandling = true
+	self:setStep(describeDisconnect(code) .. " - rejoining...")
+	warn(string.format("[Auto Robber] Disconnect detected (%s): %s", codeName, message))
+
+	task.spawn(function()
+		local preferSameServer = true
+		local delay = rejoinSettings.kickFirstDelay or 1
+		local stop = false
+
+		while self.state.kickAttempts < maxAttempts and not stop do
+			if self.state.rejoining then
+				break
+			end
+
+			task.wait(delay)
+			if self.state.rejoining then
+				break
+			end
+
+			if self.state.teleporting then
+				task.wait(1)
+				continue
+			end
+
+			self.state.kickAttempts += 1
+			local attempt = self.state.kickAttempts
+			self:setStep(string.format(
+				"%s - rejoining (%d/%d)...",
+				describeDisconnect(code),
+				attempt,
+				maxAttempts
+			))
+			warn(string.format(
+				"[Auto Robber] Reconnect attempt %d/%d (%s)",
+				attempt,
+				maxAttempts,
+				preferSameServer and "same server" or "new server"
+			))
+
+			if not self:teleportBackToServer(preferSameServer) then
+				preferSameServer = false
+				delay = rejoinSettings.kickRetryDelay or 4
+				continue
+			end
+
+			self.state.teleporting = true
+			local startedAt = os.clock()
+			local timeout = rejoinSettings.kickTeleportTimeout or 12
+
+			while os.clock() - startedAt < timeout do
+				if self.state.rejoining then
+					stop = true
+					break
+				end
+				if not self.state.teleporting then
+					break
+				end
+				task.wait(0.5)
+			end
+
+			if stop then
+				break
+			end
+
+			if self.state.teleporting then
+				local currentCode = getDisconnectCode(self.services.guiService)
+				if currentCode and currentCode ~= Enum.ConnectionError.OK then
+					-- The teleport did not take; clear it and try again.
+					self.state.teleporting = false
+				else
+					-- The error cleared, so the teleport is starting.
+					stop = true
+					break
+				end
+			end
+
+			preferSameServer = false
+			delay = rejoinSettings.kickRetryDelay or 4
+		end
+
+		self.state.kickHandling = false
+		if not stop and not self.state.rejoining and not self.state.teleporting then
+			self:setStep("Reconnect failed - rejoin manually")
+			warn("[Auto Robber] Automatic reconnect gave up")
+		end
+	end)
+end
+
+function Core:watchForDisconnects()
+	local guiService = self.services.guiService
+	local coreGui = self.services.coreGui
+	local teleportService = self.services.teleportService
+	local player = self.shared.getPlayer()
+	local lastHandledAt = 0
+
+	local function handle(message)
+		if self.state.rejoining or self.state.teleporting then
+			return
+		end
+
+		local now = os.clock()
+		if now - lastHandledAt < 2 then
+			return
+		end
+		lastHandledAt = now
+
+		local code = getDisconnectCode(guiService)
+		if code and NO_REJOIN_ERRORS[code] then
+			self:setStep(describeDisconnect(code) .. " - rejoin manually")
+			warn(string.format(
+				"[Auto Robber] Disconnect will not be auto-rejoined (%s): %s",
+				formatErrorName(code),
+				tostring(message or "")
+			))
+			return
+		end
+
+		self:handleDisconnect(message, code)
+	end
+
+	if guiService then
+		local ok, err = pcall(function()
+			guiService.ErrorMessageChanged:Connect(function(message)
+				if type(message) == "string" and message ~= "" then
+					handle(message)
+				end
+			end)
+		end)
+		if not ok then
+			warn("[Auto Robber] Could not watch GuiService.ErrorMessageChanged: " .. tostring(err))
+		end
+	end
+
+	task.spawn(function()
+		local ok, err = pcall(function()
+			local promptGui = coreGui:WaitForChild("RobloxPromptGui", 60)
+			local overlay = promptGui and promptGui:WaitForChild("promptOverlay", 60)
+			if not overlay then
+				warn("[Auto Robber] RobloxPromptGui.promptOverlay not found")
+				return
+			end
+
+			local function onPrompt(prompt)
+				task.wait(0.25)
+				handle(readErrorPromptMessage(prompt))
+			end
+
+			overlay.DescendantAdded:Connect(function(descendant)
+				if descendant.Name == "ErrorPrompt" then
+					onPrompt(descendant)
+				end
+			end)
+
+			local existing = overlay:FindFirstChild("ErrorPrompt", true)
+			if existing then
+				onPrompt(existing)
+			end
+
+			print("[Auto Robber] Disconnect watcher active")
+		end)
+		if not ok then
+			warn("[Auto Robber] Disconnect prompt watcher failed: " .. tostring(err))
+		end
+	end)
+
+	if teleportService then
+		teleportService.TeleportInitFailed:Connect(function(failedPlayer, result, message)
+			if failedPlayer ~= player then
+				return
+			end
+			if self.state.rejoining then
+				return
+			end
+
+			warn(string.format(
+				"[Auto Robber] Teleport failed (%s): %s",
+				tostring(result),
+				tostring(message)
+			))
+			self.state.teleporting = false
+		end)
 	end
 end
 
@@ -866,6 +1246,7 @@ function Core:collect(label)
 end
 
 function Core:start()
+	self:watchForDisconnects()
 	self:waitForGame()
 	self:createOverlay()
 	self:bindDeath()
