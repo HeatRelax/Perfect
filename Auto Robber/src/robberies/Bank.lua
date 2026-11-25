@@ -2,6 +2,7 @@ local Bank = {
 	name = "Bank",
 	destination = Vector3.new(763, 1, 479),
 	targetCash = "$6000",
+	baseTarget = "$3000",
 	lockName = "Bank",
 	lockWhenMissing = true,
 }
@@ -13,7 +14,13 @@ function Bank.run(core)
 		return false
 	end
 
-	if not core:waitForCash(Bank.targetCash, isLocked, "Robbing Bank (" .. Bank.targetCash .. ")", "Bank") then
+	if not core:waitForCash(
+		Bank.targetCash,
+		isLocked,
+		"Robbing Bank (" .. Bank.targetCash .. ", base " .. Bank.baseTarget .. ")",
+		"Bank",
+		Bank.baseTarget
+	) then
 		return false
 	end
 

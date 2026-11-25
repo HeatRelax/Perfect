@@ -2,6 +2,7 @@ local Jewelry = {
 	name = "Jewelry",
 	destination = Vector3.new(-77, 120, 813),
 	targetCash = "$10000",
+	baseTarget = "$5000",
 	lockName = "Jewel",
 	lockWhenMissing = false,
 }
@@ -105,7 +106,7 @@ local function farm(core, isLocked)
 		return false
 	end
 
-	core:setStep("Robbing Jewelry (" .. Jewelry.targetCash .. ")")
+	core:setStep("Robbing Jewelry (" .. Jewelry.targetCash .. ", base " .. Jewelry.baseTarget .. ")")
 
 	local workspace = core.services.workspace
 	local store = workspace:FindFirstChild("JewelryStore")
@@ -128,6 +129,8 @@ local function farm(core, isLocked)
 	local lastBagValue
 	local lastBagChangeAt = os.clock()
 	local staleLimit = 10
+	local baseTarget = core.shared.parseCash(Jewelry.baseTarget)
+	local baseCapTimeout = core.settings.timing.baseCapTimeout or 4
 
 	while not core:hasCash(Jewelry.targetCash) do
 		if isLocked() or core:isDead() then
@@ -212,9 +215,22 @@ local function farm(core, isLocked)
 			end
 		end
 
-		if lastBagValue and lastBagValue > 0 and (os.clock() - lastBagChangeAt) >= staleLimit then
+		-- When 2x is off the round caps at half the doubled target. Collect
+		-- that base cap quickly; keep the longer limit for partial caps.
+		local flatLimit = staleLimit
+		if baseTarget and lastBagValue and lastBagValue >= baseTarget then
+			flatLimit = baseCapTimeout
+		end
+
+		if lastBagValue and lastBagValue > 0 and (os.clock() - lastBagChangeAt) >= flatLimit then
 			if debug then
-				print("[JEWDBG] bag flat at", lastBagValue, "for", staleLimit, "s")
+				print("[JEWDBG] bag flat at", lastBagValue, "for", flatLimit, "s")
+			end
+			if flatLimit == baseCapTimeout and core.stats then
+				core.stats:recordEvent(string.format(
+					"Base cap %s at Jewelry (2x off, collected)",
+					core.shared.formatCash(cashLabel.Text)
+				))
 			end
 			break
 		end

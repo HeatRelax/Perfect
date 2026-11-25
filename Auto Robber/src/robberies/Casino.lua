@@ -2,6 +2,7 @@ local Casino = {
 	name = "Casino",
 	destination = Vector3.new(1655, 26, 524),
 	targetCash = "$8000",
+	baseTarget = "$4000",
 	lockName = "Casino",
 	lockWhenMissing = true,
 }
@@ -63,7 +64,7 @@ local function farm(core, isLocked)
 		return false
 	end
 
-	core:setStep("Robbing Casino (" .. Casino.targetCash .. ")")
+	core:setStep("Robbing Casino (" .. Casino.targetCash .. ", base " .. Casino.baseTarget .. ")")
 
 	local events = collectLeverEvents(core)
 	local deadline = os.clock() + 10
@@ -87,6 +88,8 @@ local function farm(core, isLocked)
 	local lastBagValue
 	local lastBagChangeAt = os.clock()
 	local staleLimit = core.settings.timing.bagStaleTimeout
+	local baseTarget = core.shared.parseCash(Casino.baseTarget)
+	local baseCapTimeout = core.settings.timing.baseCapTimeout or 4
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
 
@@ -133,6 +136,19 @@ local function farm(core, isLocked)
 		if bagValue and bagValue ~= lastBagValue then
 			lastBagValue = bagValue
 			lastBagChangeAt = os.clock()
+		end
+
+		-- 2x can be disabled, capping the round at half the doubled target.
+		if baseTarget and lastBagValue and lastBagValue >= baseTarget
+			and (os.clock() - lastBagChangeAt) >= baseCapTimeout then
+			warn("Base cap reached at Casino - collecting")
+			if core.stats then
+				core.stats:recordEvent(string.format(
+					"Base cap %s at Casino (2x off, collected)",
+					core.shared.formatCash(label.Text)
+				))
+			end
+			break
 		end
 
 		if staleLimit and lastBagValue and lastBagValue > 0

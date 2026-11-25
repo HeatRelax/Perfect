@@ -1390,7 +1390,7 @@ function Core:stopNoclip(connection)
 	self:setNoclip(false)
 end
 
-function Core:runCashLoop(targetText, isLocked, name)
+function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 	local display = name or targetText
 	local start = os.clock()
 	local bagSeenAt = nil
@@ -1398,6 +1398,8 @@ function Core:runCashLoop(targetText, isLocked, name)
 	local lastBagChangeAt = os.clock()
 	local appearTimeout = self.settings.timing.bagAppearTimeout
 	local staleLimit = self.settings.timing.bagStaleTimeout
+	local baseTarget = baseTargetText and self.shared.parseCash(baseTargetText) or nil
+	local baseCapTimeout = self.settings.timing.baseCapTimeout or 4
 	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
@@ -1447,6 +1449,22 @@ function Core:runCashLoop(targetText, isLocked, name)
 			lastBagChangeAt = os.clock()
 		end
 
+		-- The game's 2x bonus can be disabled, leaving every round capped at
+		-- half the doubled target. Collect that base cap quickly when it is
+		-- reached, but keep waiting for the full target when 2x is active.
+		if baseTarget and lastBagValue and lastBagValue >= baseTarget
+			and (os.clock() - lastBagChangeAt) >= baseCapTimeout then
+			warn("Base cap reached at " .. display .. " - collecting")
+			if self.stats then
+				self.stats:recordEvent(string.format(
+					"Base cap %s at %s (2x off, collected)",
+					self.shared.formatCash(label.Text),
+					display
+				))
+			end
+			return "timeout"
+		end
+
 		if staleLimit and lastBagValue and lastBagValue > 0
 			and (os.clock() - lastBagChangeAt) >= staleLimit then
 			warn("Cash bag stopped growing for " .. display .. " - collecting")
@@ -1477,7 +1495,7 @@ function Core:runCashLoop(targetText, isLocked, name)
 	return "target"
 end
 
-function Core:waitForCash(targetText, isLocked, label, name)
+function Core:waitForCash(targetText, isLocked, label, name, baseTargetText)
 	if isLocked and not self:guardLock(isLocked) then
 		return false
 	end
@@ -1486,7 +1504,7 @@ function Core:waitForCash(targetText, isLocked, label, name)
 	local noclipConnection = self:startNoclip(isLocked)
 
 	self.state.midHeist = true
-	local outcome = self:runCashLoop(targetText, isLocked, name)
+	local outcome = self:runCashLoop(targetText, isLocked, name, baseTargetText)
 	self.state.midHeist = false
 
 	self:stopNoclip(noclipConnection)

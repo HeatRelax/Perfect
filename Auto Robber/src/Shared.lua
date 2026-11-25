@@ -45,6 +45,7 @@ Shared.settings = {
 		leverRefire = 1.5,
 		bagAppearTimeout = 20,
 		bagStaleTimeout = 12,
+		baseCapTimeout = 4,
 		maxFarmSeconds = 120,
 	},
 

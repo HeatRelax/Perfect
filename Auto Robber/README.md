@@ -51,17 +51,35 @@ round's boxes hold, often `$5,000`), the game switches the bag label from
 `Cash Reward` to `Robbery Success!`; the script accepts that signal and
 collects instead of waiting for the farm timeout.
 
-Two timers keep depleted servers from wasting a full farm cycle:
+The doubled targets stay in place so the script immediately takes advantage
+of the 2x bonus if the game re-enables it. While 2x is off, every round caps at
+half the doubled target, so each robbery also defines a `baseTarget`:
+
+| Robbery | 2x target | Base cap |
+| --- | --- | --- |
+| Bank | `$6000` | `$3000` |
+| Casino | `$8000` | `$4000` |
+| Club | `$12000` | `$6000` |
+| Jewelry | `$10000` | `$5000` |
+
+When the bag reaches its `baseTarget` and stops growing, the script collects
+it after `baseCapTimeout` (4s). If 2x is active, the bag keeps filling past
+the base cap toward the full doubled target, so nothing is collected early.
+
+Three timers keep depleted servers from wasting a full farm cycle:
 
 - `bagAppearTimeout` (20s): if no bag appears, the robbery is still on the
   server's loot cooldown, so it is skipped and the next robbery starts.
-- `bagStaleTimeout` (12s): if a visible bag stops growing below the target
+- `bagStaleTimeout` (12s): if a visible bag stops growing below the base cap
   (another player already took part of the round), the script collects the
   capped amount instead of waiting for `maxFarmSeconds` (120s). Jewelry uses
-  its own 10s flat-bag exit inside the box farm.
+  its own flat-bag exit inside the box farm.
+- `baseCapTimeout` (4s): a bag that reached its base cap is collected quickly
+  instead of waiting for the full stale timeout.
 
-Both skips and capped collections are recorded in the event log, for example
-`No loot at Club (cooldown, skipped)` and
+Skips and capped collections are recorded in the event log, for example
+`No loot at Club (cooldown, skipped)`,
+`Base cap $6,000 at Club (2x off, collected)`, and
 `Bag capped at $3,000 at Bank (collected)`.
 
 ## Stats & Discord reports
