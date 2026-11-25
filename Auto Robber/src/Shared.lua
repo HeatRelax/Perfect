@@ -43,6 +43,7 @@ Shared.settings = {
 		ventWait = 4,
 		collectWait = 1.5,
 		leverRefire = 1.5,
+		bagAppearTimeout = 20,
 		maxFarmSeconds = 120,
 	},
 

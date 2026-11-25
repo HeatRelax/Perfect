@@ -1392,6 +1392,8 @@ end
 
 function Core:runCashLoop(targetText, isLocked)
 	local start = os.clock()
+	local bagSeenAt = nil
+	local appearTimeout = self.settings.timing.bagAppearTimeout
 	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
@@ -1407,6 +1409,28 @@ function Core:runCashLoop(targetText, isLocked)
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
 			return "fail"
+		end
+
+		-- A bag that never appears means this robbery is still on the
+		-- server's loot cooldown. Skip it instead of waiting the full farm
+		-- timeout. A stale "Robbery Success!" bag does not count as fresh.
+		local statsHud = self.shared.getStatsHud()
+		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
+		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
+		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
+			and string.lower(stolenLabel.Text) or ""
+		local isSuccess = string.find(successText, "success", 1, true) ~= nil
+		if cashBagHud and cashBagHud.Visible and not isSuccess then
+			bagSeenAt = bagSeenAt or os.clock()
+		end
+
+		if appearTimeout and not bagSeenAt and (os.clock() - start) >= appearTimeout then
+			warn("No cash bag appeared for " .. targetText .. " - skipping")
+			if self.stats then
+				self.stats:recordEvent("No loot at " .. targetText .. " (cooldown, skipped)")
+			end
+			return "timeout"
 		end
 
 		local maxFarmSeconds = self.settings.timing.maxFarmSeconds
