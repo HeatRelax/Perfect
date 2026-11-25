@@ -56,12 +56,12 @@ Shared.settings = {
 	},
 
 	rejoin = {
-		delay = 0.5,
+		delay = 0,
 		queueHandler = false,
 
 		-- Automatic recovery from unintentional kicks / disconnects.
-		kickFirstDelay = 1,
-		kickRetryDelay = 4,
+		kickFirstDelay = 0,
+		kickRetryDelay = 0.5,
 		kickTeleportTimeout = 12,
 		kickMaxAttempts = 4,
 	},

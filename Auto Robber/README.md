@@ -158,14 +158,14 @@ kicked or loses its connection, it:
 - shows `Connection lost - rejoining...`, `Kicked - rejoining...`, or a similar
   message in the stats HUD;
 - logs the full error code and message to the executor console;
-- waits one second, then rejoins the **same private server** using its private
-  server code (falling back to the same job instance);
+- rejoins immediately with the same method Infinite Yield uses: `Kick` +
+  `Teleport` when alone in the server, otherwise `TeleportToPlaceInstance` for
+  the current job;
 - retries up to four times with a short delay between attempts.
 
-This script is designed for a private/solo server. Every rejoin path stays on
-that private server; it never falls back to a public server. If the private
-server cannot be re-entered, the HUD shows `Same-server rejoin failed - rejoin
-manually` instead of silently moving to a public server.
+The rejoin path is intentionally fast: there is no pre-teleport delay and no
+long retry sleep. If the teleport cannot start, the HUD shows `Rejoin failed -
+rejoin manually`.
 
 The watcher listens to both `GuiService.ErrorMessageChanged` and the
 `RobloxPromptGui.promptOverlay` error prompt, so it still works if one signal is
@@ -280,6 +280,6 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | `core:hasCash(target)` | reads the cash bag HUD (`CashBagHUD.Cash.Amount`) |
 | `core:lockChecker(name, lockWhenMissing)` | builds a heist lock checker |
 | `core:setStep(label)` | updates the overlay status |
-| `core:rejoin()` | rejoin the same server |
+| `core:rejoin()` | rejoin with the Infinite Yield method |
 | `core:getInstancePosition(instance)` | part/model position helper |
 | `core:findPrompt(container)` | finds a ProximityPrompt |
