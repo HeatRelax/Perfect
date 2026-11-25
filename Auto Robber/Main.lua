@@ -3,7 +3,7 @@
 	Entry point. Host Main.lua next to src/, then run this file.
 ]]
 
-local repo = "LuaSecurity/Perfect"
+local repo = "HeatRelax/Perfect"
 local repoPath = "Auto%20Robber/"
 
 local function httpGet(url)
