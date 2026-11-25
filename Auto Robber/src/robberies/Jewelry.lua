@@ -88,7 +88,7 @@ local PLATFORM_NAME = "MadCityAutoRobberJewelryFloor"
 -- character at the exact farming height for the entire run.
 local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
 	local workspace = core.services.workspace
-	local minX, maxX, minY, maxY, minZ, maxZ
+	local minX, maxX, minY, minZ, maxZ
 
 	for _, box in ipairs(boxes) do
 		local position = core:getInstancePosition(box)
@@ -96,7 +96,6 @@ local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
 			minX = minX and math.min(minX, position.X) or position.X
 			maxX = maxX and math.max(maxX, position.X) or position.X
 			minY = minY and math.min(minY, position.Y) or position.Y
-			maxY = maxY and math.max(maxY, position.Y) or position.Y
 			minZ = minZ and math.min(minZ, position.Z) or position.Z
 			maxZ = maxZ and math.max(maxZ, position.Z) or position.Z
 		end
@@ -151,9 +150,7 @@ local function createFarmPlatform(core, boxes, yOffset, margin, thickness)
 	platform.Size = size
 	platform.CFrame = CFrame.new(center)
 	platform.Parent = workspace
-
-	local farmRootY = (minY or 0) + (yOffset or -6)
-	return platform, farmRootY
+	return platform
 end
 
 local function snapToFarmHeight(core, farmRootY)
