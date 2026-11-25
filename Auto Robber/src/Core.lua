@@ -163,12 +163,13 @@ local function readHudText(pathFn)
 	return "..."
 end
 
-function Core.new(shared, performance)
+function Core.new(shared, performance, stats)
 	local self = setmetatable({}, Core)
 	self.shared = shared
 	self.services = shared.services
 	self.settings = shared.settings
 	self.performance = performance
+	self.stats = stats
 	self.state = {
 		rejoining = false,
 		rejoinFallbackTried = false,
@@ -178,6 +179,9 @@ function Core.new(shared, performance)
 		switchingTeam = false,
 		hiding = false,
 		midHeist = false,
+		currentRobbery = nil,
+		robberyStartedAt = nil,
+		robberyStartCash = nil,
 	}
 	self.stepText = "Starting..."
 	self.stepLabel = nil
@@ -190,6 +194,15 @@ function Core:setStep(text)
 	self.stepText = tostring(text)
 	if self.stepLabel and self.stepLabel.Parent then
 		self.stepLabel.Text = "Step: " .. self.stepText
+	end
+
+	if self.stats then
+		local robberyName = self.stepText:match("^Robbing (%a+)")
+		if robberyName and self.state.currentRobbery ~= robberyName then
+			self.state.currentRobbery = robberyName
+			self.state.robberyStartedAt = os.clock()
+			self.state.robberyStartCash = self.stats:getCash()
+		end
 	end
 end
 
@@ -264,11 +277,14 @@ function Core:getTeleportData()
 	return self.settings.finalCFrame
 end
 
-function Core:rejoin()
+function Core:rejoin(reason)
 	if self.state.rejoining then
 		return
 	end
 	self.state.rejoining = true
+	if self.stats then
+		self.stats:recordRejoin(reason or "flow")
+	end
 	self:setStep("Rejoining server...")
 
 	local player = self.shared.getPlayer()
@@ -299,6 +315,10 @@ function Core:rejoin()
 
 	if rejoinSettings.delay > 0 then
 		task.wait(rejoinSettings.delay)
+	end
+
+	if self.stats then
+		self.stats:flush("rejoin", { reason = reason or "flow" })
 	end
 
 	-- Suppress the disconnect watcher for this intentional rejoin.
@@ -387,6 +407,15 @@ function Core:handleDisconnect(reason, code)
 	self:setStep(describeDisconnect(code) .. " - rejoining...")
 	warn(string.format("[Auto Robber] Disconnect detected (%s): %s", codeName, message))
 
+	if self.stats then
+		self.stats:recordDisconnect(codeName, message, true)
+		self.stats:flush("disconnect", {
+			force = true,
+			reason = codeName,
+			message = message,
+		})
+	end
+
 	task.spawn(function()
 		local preferSameServer = true
 		local delay = rejoinSettings.kickFirstDelay or 1
@@ -409,6 +438,7 @@ function Core:handleDisconnect(reason, code)
 
 			self.state.kickAttempts += 1
 			local attempt = self.state.kickAttempts
+			local target = preferSameServer and "same server" or "new server"
 			self:setStep(string.format(
 				"%s - rejoining (%d/%d)...",
 				describeDisconnect(code),
@@ -419,10 +449,19 @@ function Core:handleDisconnect(reason, code)
 				"[Auto Robber] Reconnect attempt %d/%d (%s)",
 				attempt,
 				maxAttempts,
-				preferSameServer and "same server" or "new server"
+				target
 			))
 
-			if not self:teleportBackToServer(preferSameServer) then
+			if self.stats then
+				self.stats:recordReconnectAttempt(attempt, maxAttempts, target)
+			end
+
+			local teleportOk = self:teleportBackToServer(preferSameServer)
+			if self.stats then
+				self.stats:recordReconnectResult(teleportOk, target)
+			end
+
+			if not teleportOk then
 				preferSameServer = false
 				delay = rejoinSettings.kickRetryDelay or 4
 				continue
@@ -497,6 +536,15 @@ function Core:watchForDisconnects()
 				formatErrorName(code),
 				tostring(message or "")
 			))
+			if self.stats then
+				self.stats:recordDisconnect(formatErrorName(code), message, false)
+				self.stats:flush("disconnect", {
+					force = true,
+					reason = formatErrorName(code),
+					message = tostring(message or ""),
+					permanent = true,
+				})
+			end
 			return
 		end
 
@@ -558,6 +606,9 @@ function Core:watchForDisconnects()
 				if not self.state.rejoinFallbackTried then
 					self.state.rejoinFallbackTried = true
 					warn("[Auto Robber] Same-server rejoin failed, joining a new server: " .. tostring(message))
+					if self.stats then
+						self.stats:recordEvent("Same-server rejoin failed; trying a new server")
+					end
 					local teleportData = self:getTeleportData()
 					local ok, err = pcall(function()
 						teleportService:Teleport(game.PlaceId, player, teleportData)
@@ -610,7 +661,7 @@ function Core:bindDeath()
 				return
 			end
 			self:setStep("Died - rejoining...")
-			self:rejoin()
+			self:rejoin("death")
 		end)
 	end
 
@@ -690,6 +741,10 @@ function Core:waitForSolo(isLocked, resumeLabel)
 	end)
 	task.wait(0.5)
 
+	if self.stats then
+		self.stats:beginIdle()
+	end
+
 	local idleSettings = self.settings.idle
 	local idleStart = os.clock()
 	local lastNudge = os.clock()
@@ -716,6 +771,10 @@ function Core:waitForSolo(isLocked, resumeLabel)
 		))
 
 		task.wait(idleSettings.checkInterval)
+	end
+
+	if self.stats then
+		self.stats:endIdle()
 	end
 
 	self.state.hiding = false
@@ -1218,6 +1277,9 @@ function Core:runCashLoop(targetText, isLocked)
 		local maxFarmSeconds = self.settings.timing.maxFarmSeconds
 		if maxFarmSeconds and (os.clock() - start) >= maxFarmSeconds then
 			warn("Reached max farm time while waiting for " .. targetText)
+			if self.stats then
+				self.stats:recordEvent("Farm timeout while waiting for " .. targetText)
+			end
 			return "timeout"
 		end
 
@@ -1269,13 +1331,40 @@ function Core:travel(destination, isLocked, label)
 end
 
 function Core:collect(label)
+	local robberyName = self.state.currentRobbery
+	if not robberyName and label then
+		robberyName = label:match("Collecting (%a+) cash")
+	end
+
 	if not self:pivot(self.settings.finalCFrame, nil, label) then
+		if self.stats then
+			self.stats:recordRobberyFailure(robberyName, "collect teleport failed")
+		end
 		return false
 	end
 	if not self:waitGuarded(self.settings.timing.collectWait, nil, label) then
+		if self.stats then
+			self.stats:recordRobberyFailure(robberyName, "collect wait failed")
+		end
 		return false
 	end
+
 	self.state.midHeist = false
+
+	if self.stats then
+		local cash = self.stats:getCash()
+		local startCash = self.state.robberyStartCash
+		local earned = 0
+		if startCash and startCash > 0 and cash and cash >= startCash then
+			earned = cash - startCash
+		end
+		local duration = self.state.robberyStartedAt and (os.clock() - self.state.robberyStartedAt) or 0
+		self.stats:recordRobbery(robberyName, earned, duration)
+	end
+
+	self.state.currentRobbery = nil
+	self.state.robberyStartedAt = nil
+	self.state.robberyStartCash = nil
 	return true
 end
 

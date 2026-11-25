@@ -9,6 +9,7 @@ local tweenService = game:GetService("TweenService")
 local virtualUser = game:GetService("VirtualUser")
 local lighting = game:GetService("Lighting")
 local starterGui = game:GetService("StarterGui")
+local httpService = game:GetService("HttpService")
 
 local Shared = {}
 
@@ -24,6 +25,7 @@ Shared.services = {
 	virtualUser = virtualUser,
 	lighting = lighting,
 	starterGui = starterGui,
+	httpService = httpService,
 }
 
 Shared.settings = {
@@ -59,6 +61,25 @@ Shared.settings = {
 		kickRetryDelay = 4,
 		kickTeleportTimeout = 12,
 		kickMaxAttempts = 4,
+	},
+
+	stats = {
+		enabled = true,
+
+		-- The webhook is never hard-coded. It is read from this file inside the
+		-- executor workspace. The file may contain a plain URL or an encoded
+		-- "MAD1:<hex>" value created with getgenv().MadCityAutoRobberEncodeWebhook.
+		webhookFile = "MadCityAutoRobberWebhook.txt",
+		webhookUsername = "Mad City Auto Robber",
+
+		reportInterval = 300,
+		startupDelay = 10,
+		minSendInterval = 5,
+		flushTimeout = 3,
+		persistInterval = 30,
+		topPlayers = 5,
+		maxEvents = 20,
+		resumeWindow = 600,
 	},
 }
 
@@ -166,22 +187,22 @@ end
 -- The cash HUD normally contains "$10342575", but the game sometimes
 -- abbreviates it ("$10M") or adds separators. Expand and re-format it so the
 -- overlay always shows the exact amount with commas.
-function Shared.formatCash(text)
+function Shared.parseCash(text)
 	local raw = tostring(text or "")
-	local prefix, body = raw:match("^(%D*)(.*)$")
+	local body = raw:match("^%D*(.*)$")
 
 	if not body or body == "" then
-		return raw
+		return nil
 	end
 
 	local numberText, suffix = body:match("^([%d,%.]+)%s*([KkMmBbTt]?)$")
 	if not numberText then
-		return raw
+		return nil
 	end
 
 	local number = tonumber((numberText:gsub(",", "")))
 	if not number then
-		return raw
+		return nil
 	end
 
 	local multiplier = 1
@@ -189,7 +210,27 @@ function Shared.formatCash(text)
 		multiplier = CASH_SUFFIXES[suffix:upper()] or 1
 	end
 
-	return prefix .. formatWithCommas(number * multiplier)
+	return number * multiplier
+end
+
+function Shared.formatCash(text)
+	local raw = tostring(text or "")
+	local prefix = raw:match("^(%D*)") or ""
+	local value = Shared.parseCash(raw)
+
+	if not value then
+		return raw
+	end
+
+	return prefix .. formatWithCommas(value)
+end
+
+function Shared.formatNumber(value)
+	value = tonumber(value)
+	if not value then
+		return "0"
+	end
+	return formatWithCommas(value)
 end
 
 function Shared.getStatsHud()

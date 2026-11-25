@@ -7,6 +7,7 @@ Main.lua                  entry point (the executor only loads this)
 src/
   Shared.lua              services, settings, game primitives, cash formatting
   Core.lua                flow engine (travel, guards, idling, HUD, rejoin, disconnect recovery)
+  Stats.lua               runtime stats, persistence, Discord webhook reports
   Performance.lua         automatic max-FPS / black-screen boost
   robberies/
     Jewelry.lua
@@ -24,6 +25,74 @@ such as `$10,342,575`.
 Below the stats panel, a player list shows every player in the server. Each
 name is colored with that player's team color; players without a team appear
 gray. The list updates automatically as players join, leave, or change teams.
+
+## Stats & Discord reports
+
+The Auto Robber tracks a full run in the background and posts Discord embeds.
+The report includes:
+
+- session, run, and all-time runtime;
+- current cash, cash gained/lost, net change, and cash per hour;
+- total cash gained, average per session, and average per robbery;
+- sessions, rejoins (with reasons), disconnects, and reconnect attempts;
+- robberies completed, per-hour rate, failures, breakdown, and earnings;
+- idle time while other players are in the server;
+- unique players seen, join events, peak server size, total player time, and a
+  top-players list with each player's time and team;
+- best session, best run, previous session/run, recent events, job id, ping,
+  memory use, executor name, and timestamps.
+
+Reports are sent:
+
+- once shortly after the script starts;
+- every 5 minutes (`Shared.settings.stats.reportInterval`);
+- before an intentional rejoin and before auto-reconnect attempts;
+- when a permanent disconnect is detected;
+- on demand with `getgenv().MadCityAutoRobberStats:SendReport()`.
+
+Stats persist across rejoins through `getgenv` and a local JSON file named
+`MadCityAutoRobberStats_<PlaceId>.json` in the executor workspace. A rejoin
+continues the same run; a fresh execution starts a new run.
+
+### Webhook setup (local-only)
+
+The webhook is **never stored in this repository**. It is read from a file in
+the executor workspace:
+
+```lua
+writefile("MadCityAutoRobberWebhook.txt", "https://discord.com/api/webhooks/...")
+```
+
+To store it encoded instead of plain text:
+
+```lua
+writefile(
+    "MadCityAutoRobberWebhook.txt",
+    getgenv().MadCityAutoRobberEncodeWebhook("https://discord.com/api/webhooks/...")
+)
+```
+
+The encoder writes an `MAD1:<hex>` payload; the script decodes it at runtime.
+If `readfile`/`writefile` are unavailable, you can set the URL for the current
+session only:
+
+```lua
+getgenv().MadCityAutoRobberWebhook = "https://discord.com/api/webhooks/..."
+```
+
+Useful commands:
+
+```lua
+getgenv().MadCityAutoRobberStats:SendReport()      -- send a report now
+getgenv().MadCityAutoRobberStats:ReloadWebhook()   -- re-read the local file
+getgenv().MadCityAutoRobberStats:GetSnapshot()     -- raw stats table
+getgenv().MadCityAutoRobberStats:Stop(true)        -- stop tracking and send final
+```
+
+`MadCityAutoRobberWebhook*.txt` and `MadCityAutoRobberStats_*.json` are in
+`.gitignore` and must never be committed. Webhook failures, Discord rate
+limits, or a missing file are logged and ignored; they never stop the Auto
+Robber. A report cannot be sent after the Roblox process crashes or is closed.
 
 ## Disconnect recovery
 
@@ -99,6 +168,7 @@ If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
 - `src/Shared.lua` — service references, shared settings, game helpers, cash formatting
 - `src/robberies/<Name>.lua` — one robbery per file (destination, cash target, behavior)
 - `src/Core.lua` — shared flow engine; normally does not need changing
+- `src/Stats.lua` — runtime stats, local persistence, Discord webhook reports
 - `src/Performance.lua` — automatic FPS boost and black screen
 - Robbery order lives in `Shared.settings.robberyOrder`
 

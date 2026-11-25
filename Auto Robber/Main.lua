@@ -86,6 +86,11 @@ if dryRun then
 	return
 end
 
+local Stats = loadModule("src/Stats", "new")
+local stats = Stats.new(Shared)
+core.stats = stats
+stats:start()
+
 if type(queue_on_teleport) == "function" then
 	local url = mainUrl .. "?t=" .. os.time()
 	queue_on_teleport(("loadstring(game:HttpGet(%q))()"):format(url))
@@ -100,5 +105,5 @@ for _, robbery in ipairs(robberies) do
 end
 
 if core:guard() then
-	core:rejoin()
+	core:rejoin("cycle")
 end
