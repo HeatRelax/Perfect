@@ -9,6 +9,7 @@ src/
   Core.lua                flow engine (travel, guards, idling, HUD, rejoin, disconnect recovery)
   Stats.lua               runtime stats and local persistence
   Performance.lua         automatic performance boost (3D rendering stays on)
+  MiniHeists.lua          fast sweep of the $500 map cash pickups
   robberies/
     Jewelry.lua
     Club.lua
@@ -84,6 +85,42 @@ Skips and capped collections are recorded in the event log, for example
 `Base cap $6,000 at Club (2x off, collected)`, and
 `Bag capped at $3,000 at Bank (collected)`.
 
+## Mini heists
+
+After every robbery the script sweeps the ten `$500` cash pickups under
+`workspace.ObjectSelection.Cash`. Each pickup is a `Cash` model containing a
+`CashReward` IntValue and a `Cash` MeshPart whose `Cash` script exposes an
+`Event` RemoteEvent.
+
+The server only accepts a pickup when the player is close to it, so the sweep
+teleports onto each pickup, waits `miniHeists.preFireDelay` (0.25s) for the new
+position to replicate, fires the event with the pickup part, and immediately
+moves to the next nearest pickup. `miniHeists.postFireDelay` (0.08s) lets the
+event leave before the next teleport. A ten-pickup sweep takes about three
+seconds.
+
+Pickups respawn after roughly 20-60 seconds, so each sweep takes whatever is
+available at that boundary without delaying the robbery cycle. A sweep also
+stops early if another player joins; the next robbery then idles until the
+server is solo again. Settings live in `Shared.settings.miniHeists`.
+
+## Jewelry box farm
+
+Jewelry no longer tweens to one box, waits for its health to drop, and then
+tweens to the next. The character follows a continuous nearest-neighbour tour
+of the live boxes while every live box is fired once per volley:
+
+- `movement.jewelryVolleyInterval` (0.15s) — time between all-box volleys.
+- `movement.jewelrySpeed` (50) — normal travel speed between boxes.
+- `movement.jewelryMinSpeed` (12) — minimum approach speed near a box.
+- `movement.jewelrySlowRadius` (8) — distance at which movement starts slowing.
+
+The server registers at most one hit per box per volley and only for boxes near
+the player. Firing every box means the closest cluster breaks while the
+character is already moving to the next stop; boxes outside hit range ignore
+the event harmlessly. `movement.firesPerBox` is now `1` because extra calls in
+the same volley do not stack.
+
 ## Stats
 
 The Auto Robber tracks a full run in the background and shows it in the stats
@@ -94,6 +131,7 @@ overlay. It records:
 - total cash gained, average per session, and average per robbery;
 - sessions, rejoins (with reasons), disconnects, and reconnect attempts;
 - robberies completed, per-hour rate, failures, breakdown, and earnings;
+- mini heist sweeps, with pickups collected and cash gained;
 - idle time while other players are in the server;
 - unique players seen, join events, peak server size, and total player time;
 - best session, best run, previous session/run, and recent events.
@@ -196,6 +234,7 @@ If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
 - `src/Core.lua` — shared flow engine; normally does not need changing
 - `src/Stats.lua` — runtime stats and local persistence
 - `src/Performance.lua` — automatic performance boost (3D rendering stays on)
+- `src/MiniHeists.lua` — fast sweep of the map cash pickups after each robbery
 - Robbery order lives in `Shared.settings.robberyOrder`
 
 ### Adding a robbery

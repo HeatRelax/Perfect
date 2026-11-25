@@ -34,18 +34,37 @@ local function collectBoxes(core, folder)
 	return boxes
 end
 
-local function nearestBox(core, boxes, root)
-	local best, bestDistance
+-- A nearest-neighbour tour lets the character keep moving through the store
+-- without stopping at every box. The tour is rebuilt whenever the current one
+-- has been visited, so boxes that survived a pass are picked up next time.
+local function buildTour(core, boxes, origin)
+	local pool = {}
 	for _, box in ipairs(boxes) do
 		local position = core:getInstancePosition(box)
-		if position and root then
-			local distance = (position - root.Position).Magnitude
-			if not bestDistance or distance < bestDistance then
-				best, bestDistance = box, distance
-			end
+		if position then
+			table.insert(pool, { box = box, position = position })
 		end
 	end
-	return best, bestDistance
+
+	local tour = {}
+	local position = origin
+	while #pool > 0 do
+		local bestIndex, bestDistance
+		for index, entry in ipairs(pool) do
+			local distance = (entry.position - position).Magnitude
+			if not bestDistance or distance < bestDistance then
+				bestIndex, bestDistance = index, distance
+			end
+		end
+		if not bestIndex then
+			break
+		end
+
+		local entry = table.remove(pool, bestIndex)
+		table.insert(tour, entry.box)
+		position = entry.position
+	end
+	return tour
 end
 
 local function enterVent(core, isLocked)
@@ -106,7 +125,8 @@ local function farm(core, isLocked)
 		return false
 	end
 
-	core:setStep("Robbing Jewelry (" .. Jewelry.targetCash .. ", base " .. Jewelry.baseTarget .. ")")
+	local label = "Robbing Jewelry (" .. Jewelry.targetCash .. ", base " .. Jewelry.baseTarget .. ")"
+	core:setStep(label)
 
 	local workspace = core.services.workspace
 	local store = workspace:FindFirstChild("JewelryStore")
@@ -131,8 +151,30 @@ local function farm(core, isLocked)
 	local staleLimit = 10
 	local baseTarget = core.shared.parseCash(Jewelry.baseTarget)
 	local baseCapTimeout = core.settings.timing.baseCapTimeout or 4
+	local heartbeat = core.services.runService.Heartbeat
+
+	local tour = {}
+	local tourIndex = 1
+	local nextVolleyAt = 0
+	local nextBagCheck = 0
+	local volleyInterval = movement.jewelryVolleyInterval or 0.15
+	local firesPerBox = math.max(1, math.floor(movement.firesPerBox or 1))
+	local speed = movement.jewelrySpeed or 50
+	local minSpeed = movement.jewelryMinSpeed or 12
+	local slowRadius = movement.jewelrySlowRadius or 8
+	local yOffset = movement.boxYOffset
 
 	while not core:hasCash(Jewelry.targetCash) do
+		-- Heartbeat gives this loop a frame delta for smooth, continuous
+		-- movement while the event volleys run at their own interval.
+		local dt = math.min(heartbeat:Wait(), 0.1)
+
+		if core.stopped then
+			core.state.midHeist = false
+			core:stopNoclip(noclipConnection)
+			return false
+		end
+
 		if isLocked() or core:isDead() then
 			core.state.midHeist = false
 			core:stopNoclip(noclipConnection)
@@ -141,11 +183,12 @@ local function farm(core, isLocked)
 		end
 
 		if core:hasOtherPlayers() then
-			if not core:waitForSolo(isLocked, "Robbing Jewelry (" .. Jewelry.targetCash .. ")") then
+			if not core:waitForSolo(isLocked, label) then
 				core.state.midHeist = false
 				core:stopNoclip(noclipConnection)
 				return false
 			end
+			core:setStep(label)
 		end
 
 		local elapsed = os.clock() - start
@@ -154,15 +197,18 @@ local function farm(core, isLocked)
 			break
 		end
 
-		-- Read the bag first. If the round has already paid out everything it
-		-- can, the amount stays flat even while boxes are being broken.
-		local cashLabel = core.shared.getCashLabel()
-		local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
-		if bagValue and bagValue ~= lastBagValue then
-			lastBagValue = bagValue
-			lastBagChangeAt = os.clock()
-			if debug then
-				print("[JEWDBG] bag", bagValue, "at", string.format("%.1f", elapsed))
+		-- Read the bag a few times per second. If the round has already paid
+		-- out everything it can, the amount stays flat even while boxes break.
+		if os.clock() >= nextBagCheck then
+			nextBagCheck = os.clock() + 0.2
+			local cashLabel = core.shared.getCashLabel()
+			local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
+			if bagValue and bagValue ~= lastBagValue then
+				lastBagValue = bagValue
+				lastBagChangeAt = os.clock()
+				if debug then
+					print("[JEWDBG] bag", bagValue, "at", string.format("%.1f", elapsed))
+				end
 			end
 		end
 
@@ -178,40 +224,79 @@ local function farm(core, isLocked)
 		end
 
 		local root = core:getRoot()
-		local box, distance = nearestBox(core, boxes, root)
-		if box then
-			local position = core:getInstancePosition(box)
-			if position and core:guard(isLocked) then
-				local target = position + Vector3.new(0, movement.boxYOffset, 0)
-				core:tweenTo(target, movement.boxTweenSpeed, isLocked)
-			end
+		if not root then
+			task.wait(0.05)
+			continue
+		end
 
-			-- Only boxes within reach accept the hit. Firing every box in the
-			-- store wasted network calls and made the farm take minutes.
-			local currentRoot = core:getRoot()
-			local fired = 0
-			for _, nearby in ipairs(collectBoxes(core, folder)) do
-				local nearbyPosition = core:getInstancePosition(nearby)
-				if nearbyPosition and currentRoot
-					and (nearbyPosition - currentRoot.Position).Magnitude <= 12 then
-					for _ = 1, movement.firesPerBox do
-						remote:FireServer(nearby, true)
-					end
-					fired += 1
-				end
+		-- Skip boxes that broke since the tour was built.
+		while tourIndex <= #tour do
+			local entry = tour[tourIndex]
+			if entry.Parent and getBoxHp(entry) > 0 and core:getInstancePosition(entry) then
+				break
 			end
+			tourIndex += 1
+		end
+
+		if tourIndex > #tour then
+			tour = buildTour(core, boxes, root.Position)
+			tourIndex = 1
+			if #tour == 0 then
+				task.wait(0.1)
+				continue
+			end
+		end
+
+		local target = core:getInstancePosition(tour[tourIndex])
+		if target then
+			local goal = target + Vector3.new(0, yOffset, 0)
+			local delta = goal - root.Position
+			local distance = delta.Magnitude
+
+			if distance > 1 then
+				-- Slow down near a box so it stays inside hit range for a few
+				-- volleys, but never stop: the next stop is always selected.
+				local currentSpeed = speed
+				if distance < slowRadius then
+					currentSpeed = math.max(minSpeed, speed * (distance / slowRadius))
+				end
+
+				local step = math.min(distance, currentSpeed * dt)
+				local direction = delta / distance
+				local nextPosition = root.Position + direction * step
+				local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+				local goalCFrame = flatDirection.Magnitude > 0.001
+					and CFrame.lookAt(nextPosition, nextPosition + flatDirection)
+					or CFrame.new(nextPosition)
+
+				local character = core.shared.getCharacter()
+				if character then
+					character:PivotTo(goalCFrame)
+				end
+			else
+				-- Arrived: keep moving to the next stop instead of waiting for
+				-- this box's health to drop.
+				tourIndex += 1
+			end
+		else
+			tourIndex += 1
+		end
+
+		-- Fire every live box once per volley. The server only accepts hits
+		-- for boxes near the player, so whichever cluster is closest breaks
+		-- while the character is already travelling to the next one.
+		if os.clock() >= nextVolleyAt then
+			local fired = 0
+			for _, box in ipairs(boxes) do
+				for _ = 1, firesPerBox do
+					remote:FireServer(box, true)
+				end
+				fired += 1
+			end
+			nextVolleyAt = os.clock() + volleyInterval
 
 			if debug then
-				print("[JEWDBG] box", box.Name, "hp", getBoxHp(box), "dist",
-					distance and string.format("%.1f", distance) or "?", "fired", fired,
-					"at", string.format("%.1f", elapsed))
-			end
-
-			-- Let the hit register before choosing the next box.
-			local before = getBoxHp(box)
-			local hitDeadline = os.clock() + 0.75
-			while os.clock() < hitDeadline and getBoxHp(box) >= before do
-				core.services.runService.Heartbeat:Wait()
+				print("[JEWDBG] volley", fired, "boxes at", string.format("%.1f", elapsed))
 			end
 		end
 
@@ -226,7 +311,8 @@ local function farm(core, isLocked)
 			if debug then
 				print("[JEWDBG] bag flat at", lastBagValue, "for", flatLimit, "s")
 			end
-			if flatLimit == baseCapTimeout and core.stats then
+			local cashLabel = core.shared.getCashLabel()
+			if flatLimit == baseCapTimeout and core.stats and cashLabel then
 				core.stats:recordEvent(string.format(
 					"Base cap %s at Jewelry (2x off, collected)",
 					core.shared.formatCash(cashLabel.Text)
@@ -234,8 +320,6 @@ local function farm(core, isLocked)
 			end
 			break
 		end
-
-		core.services.runService.Heartbeat:Wait()
 	end
 
 	core.state.midHeist = false

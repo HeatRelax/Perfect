@@ -35,8 +35,28 @@ Shared.settings = {
 	movement = {
 		boxTweenSpeed = 75,
 		boxYOffset = -6,
-		firesPerBox = 3,
+		firesPerBox = 1,
 		firesPerLever = 1,
+
+		-- Jewelry farms with continuous movement instead of stopping at every
+		-- box. Every live box is fired once per volley; the server only accepts
+		-- hits for boxes near the player, so travelling through the store keeps
+		-- the nearest cluster breaking while the next one comes into range.
+		jewelrySpeed = 50,
+		jewelryMinSpeed = 12,
+		jewelrySlowRadius = 8,
+		jewelryVolleyInterval = 0.15,
+	},
+
+	miniHeists = {
+		enabled = true,
+
+		-- The server checks the player's replicated position, so give each
+		-- teleport a moment before firing. The post delay lets the event leave
+		-- before the next teleport moves the character away.
+		preFireDelay = 0.25,
+		postFireDelay = 0.08,
+		tpHeight = 3,
 	},
 
 	timing = {

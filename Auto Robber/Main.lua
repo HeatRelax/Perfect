@@ -118,6 +118,8 @@ for _, robberyName in ipairs(Shared.settings.robberyOrder) do
 	table.insert(robberies, loadModule("src/robberies/" .. robberyName, "run"))
 end
 
+local MiniHeists = loadModule("src/MiniHeists", "run")
+
 local env
 if type(getgenv) == "function" then
 	local ok, result = pcall(getgenv)
@@ -175,6 +177,9 @@ core:start()
 
 for _, robbery in ipairs(robberies) do
 	if not robbery.run(core) then
+		return
+	end
+	if not MiniHeists.run(core) then
 		return
 	end
 end
