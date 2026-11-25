@@ -45,7 +45,11 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 | Jewelry | `$10000` |
 
 A robbery only counts after its bag has been seen visible and below the new
-target, so a stale bag from the previous heist cannot skip the next one.
+target, so a stale bag from the previous heist cannot skip the next one. When
+a bag runs out of loot before the doubled target (Jewelry caps at whatever the
+22 boxes hold, often around `$3800`), the game switches the bag label from
+`Cash Reward` to `Robbery Success!`; the script accepts that signal and
+collects instead of waiting for the farm timeout.
 
 ## Stats & Discord reports
 

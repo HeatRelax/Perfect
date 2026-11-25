@@ -232,19 +232,35 @@ function Core:hasCash(targetText)
 		return reached
 	end
 
-	if not watch.armed then
-		local statsHud = self.shared.getStatsHud()
-		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
-		local label = self.shared.getCashLabel()
-		local value = label and self.shared.parseCash(label.Text)
-		local target = self.shared.parseCash(targetText)
+	local statsHud = self.shared.getStatsHud()
+	local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+	local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
+	local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
+	local label = self.shared.getCashLabel()
+	local value = label and self.shared.parseCash(label.Text)
+	local target = self.shared.parseCash(targetText)
+	local successText = stolenLabel and stolenLabel:IsA("TextLabel")
+		and string.lower(stolenLabel.Text) or ""
+	local gameSaysSuccess = string.find(successText, "success", 1, true) ~= nil
 
+	if not watch.armed then
 		-- Only arm after the bag has been seen visible and below this
 		-- robbery's target. A stale bag from the previous heist can stay at
 		-- its old target for a moment, so hiding alone is not enough.
 		if cashBagHud and cashBagHud.Visible and value and target and value < target then
 			watch.armed = true
 		end
+	end
+
+	if watch.armed and not watch.sawActive and not gameSaysSuccess then
+		watch.sawActive = true
+	end
+
+	-- Some heists (Jewelry) run out of loot before the doubled VIP target
+	-- can be reached. The game marks those bags "Robbery Success!" once
+	-- every box is empty, so collect instead of waiting for the timeout.
+	if watch.armed and watch.sawActive and gameSaysSuccess then
+		return true
 	end
 
 	return reached and watch.armed
