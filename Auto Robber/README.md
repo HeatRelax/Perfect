@@ -159,8 +159,9 @@ service's `Data Ping`) and `Core:getBaseWait()` waits one round trip plus a
 100ms buffer, clamped to 0.1-1.0s. The server pays out when it registers the
 player at the base, so the next robbery starts as soon as that round trip
 finishes. Per-robbery stats use the increase of the total cash HUD across the
-collect wait, capped at the heist's maximum; the bag growth measured during
-the heist is the fallback if the total HUD has not updated yet.
+collect wait, capped at the heist's maximum. A fresh bag already sitting at
+that maximum is recorded as the full payout even if the total HUD has not
+updated yet; the bag growth measured during the heist is the fallback.
 
 The same live wait is used before each mini-heist fire. The Jewelry vent is
 fully event-driven: `workspace.JewelryStore.JewelryVent.Vent.Break` is watched

@@ -1715,7 +1715,14 @@ function Core:collect(label)
 	-- part of the snapshot and cannot be counted twice.
 	local watch = self.state.cashWatch
 	local bagEarned = watch and watch.bestEarned or 0
-	local earnedBefore = self:getHeistEarned()
+	local earnedBefore, maxTarget, bagValue, bagFresh = self:getHeistEarned()
+
+	-- A fresh bag already sitting at the heist's known maximum is a full
+	-- payout even when the total cash HUD has not caught up yet.
+	if maxTarget and maxTarget > 0 and bagFresh and bagValue and bagValue >= maxTarget then
+		earnedBefore = maxTarget
+	end
+
 	local cashBefore
 	if self.stats then
 		self.stats:updateCash()
@@ -1748,7 +1755,6 @@ function Core:collect(label)
 		end
 	end
 
-	local maxTarget = watch and self.shared.parseCash(watch.target) or nil
 	if maxTarget and maxTarget > 0 and earned > maxTarget then
 		earned = maxTarget
 	end
