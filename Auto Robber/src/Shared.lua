@@ -84,6 +84,11 @@ Shared.settings = {
 		leverRefire = 0.5,
 		bagAppearTimeout = 20,
 
+		-- The bag HUD can show the previous heist's amount for a moment after
+		-- arriving. Whatever it shows during this window becomes the stale
+		-- baseline; only later growth (or a reset below it) counts.
+		bagSettleTime = 1.5,
+
 		-- A round caps at the base payout without VIP and at twice the base
 		-- with it. Once the earned amount reaches a cap and stays flat for
 		-- this long, the heist is done and the bag can be delivered.

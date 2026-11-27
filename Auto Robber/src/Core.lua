@@ -180,7 +180,6 @@ function Core.new(shared, performance, stats)
 		midHeist = false,
 		currentRobbery = nil,
 		robberyStartedAt = nil,
-		robberyStartCash = nil,
 		cashWatch = nil,
 		lastBagValue = nil,
 	}
@@ -237,11 +236,6 @@ function Core:setStep(text)
 			bestEarned = 0,
 		} or nil
 		self.state.lastBagValue = nil
-
-		if self.stats then
-			self.stats:updateCash()
-			self.state.robberyStartCash = self.stats:getCash()
-		end
 	end
 end
 
@@ -257,11 +251,12 @@ function Core:hasOtherPlayers()
 	return self.shared.hasOtherPlayers()
 end
 
--- Loot earned in the current heist, measured from the bag HUD. The bag can
--- still show the previous heist's amount when a new heist starts, so only the
--- growth since then counts. If the bag resets (value drops below the start)
--- the value itself is the new heist's loot. The heist's known maximum caps it
--- because the game can never pay more.
+-- Loot earned in the current heist. The HUD can still show the previous
+-- heist's amount when a new heist starts, so the first moments are spent
+-- settling on a baseline: whatever the bag shows then is treated as stale and
+-- only later growth (or a reset below the baseline) counts as this round's
+-- loot. The actual bag value drives completion, so a partial baseline never
+-- hides the real cap.
 function Core:getHeistEarned()
 	local watch = self.state.cashWatch
 	if not watch then
@@ -269,49 +264,78 @@ function Core:getHeistEarned()
 	end
 
 	local maxTarget = self.shared.parseCash(watch.target) or 0
-	local earned = 0
-
 	local statsHud = self.shared.getStatsHud()
 	local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+	local value
 	if cashBagHud and cashBagHud.Visible then
 		local label = self.shared.getCashLabel()
-		local value = label and self.shared.parseCash(label.Text)
-		if value then
-			if watch.bagStart and not watch.bagReset then
-				-- The HUD may keep the previous heist's amount and add this
-				-- heist's loot on top, or reset it and start from zero. Once
-				-- it drops below the start it has reset for this heist.
-				if value < watch.bagStart then
-					watch.bagReset = true
-				end
-			end
+		value = label and self.shared.parseCash(label.Text) or nil
+	end
 
-			if watch.bagStart and not watch.bagReset then
-				earned = value - watch.bagStart
+	local now = os.clock()
+	local settleTime = self.settings.timing.bagSettleTime or 1.5
+
+	if not watch.settled then
+		if now - (watch.startedAt or now) >= settleTime then
+			watch.settled = true
+			watch.bagStart = value
+			watch.bagReset = false
+			watch.earnedChangedAt = now
+			watch.lastProgressAt = now
+		end
+		return 0, maxTarget, value, false
+	end
+
+	local earned = 0
+	local fresh = false
+	if value then
+		if watch.bagStart == nil then
+			-- The bag was hidden when the baseline was taken. Its first
+			-- visible value becomes the baseline; a stale bag must not count.
+			watch.bagStart = value
+			watch.earnedChangedAt = now
+			watch.lastProgressAt = now
+		elseif not watch.bagReset and value < watch.bagStart then
+			-- A drop to near zero is a fresh round starting. A drop to
+			-- another large amount is just the HUD switching to a different
+			-- heist's stale bag, so move the baseline instead of counting it.
+			local resetThreshold = math.max(100, maxTarget * 0.05)
+			if value <= resetThreshold then
+				watch.bagReset = true
 			else
-				-- A reset bag (or one hidden when the heist started) shows
-				-- this heist's loot directly. Anything above the heist
-				-- maximum is a stale amount from a richer heist.
-				earned = value <= maxTarget and value or 0
+				watch.bagStart = value
+				watch.earnedChangedAt = now
+				watch.lastProgressAt = now
 			end
+		end
+
+		if watch.bagReset then
+			earned = value
+			fresh = value > 0
+		elseif watch.bagStart then
+			earned = value - watch.bagStart
+			fresh = value > watch.bagStart
 		end
 	end
 
+	if earned < 0 then
+		earned = 0
+	end
 	if maxTarget > 0 and earned > maxTarget then
 		earned = maxTarget
 	end
 
-	return earned, maxTarget
+	return earned, maxTarget, value, fresh
 end
 
--- True once this heist has earned its expected payout (or run out of loot).
+-- True once this heist's bag has really reached its expected payout.
 function Core:hasCash(targetText)
 	local watch = self.state.cashWatch
 	if not watch or watch.target ~= targetText then
 		return self.shared.hasCash(targetText)
 	end
 
-	local earned, maxTarget = self:getHeistEarned()
+	local earned, maxTarget, value, fresh = self:getHeistEarned()
 	local baseTarget = self.shared.parseCash(watch.base or "") or maxTarget
 	local now = os.clock()
 
@@ -324,15 +348,16 @@ function Core:hasCash(targetText)
 	local flat = now - (watch.earnedChangedAt or now)
 	local timing = self.settings.timing
 
-	-- The doubled target is the absolute maximum the game can pay. When it
-	-- is reached and stops growing, the round is finished.
-	if earned >= maxTarget and flat >= (timing.maxConfirmTime or 0.3) then
+	-- The bag itself must reach the heist's known maximum (the game cannot
+	-- pay more) and it must have changed since the baseline, so a stale bag
+	-- from an earlier round cannot complete this one.
+	if fresh and value and value >= maxTarget and flat >= (timing.maxConfirmTime or 0.3) then
 		return true
 	end
 
-	-- Without VIP the round caps at the base payout. Collect it as soon as
-	-- it stops growing instead of waiting for the doubled target.
-	if earned >= baseTarget and flat >= (timing.baseCapTimeout or 2) then
+	-- Without VIP the round caps at the base payout. Collect it once the bag
+	-- has stopped growing.
+	if fresh and value and value >= baseTarget and flat >= (timing.baseCapTimeout or 2) then
 		return true
 	end
 
@@ -1681,12 +1706,18 @@ function Core:collect(label)
 		robberyName = label:match("Collecting (%a+) cash")
 	end
 
-	-- Snapshot the loot earned before the collect teleport resets the bag.
-	-- The total cash delta after the teleport is the real payout.
+	-- Snapshot the loot earned and the total cash right before the collect
+	-- teleport. The cash increase across the wait is this heist's real
+	-- payout; a payout from the previous heist that landed late is already
+	-- part of the snapshot and cannot be counted twice.
 	local watch = self.state.cashWatch
 	local bagEarned = watch and watch.bestEarned or 0
 	local earnedBefore = self:getHeistEarned()
-	local startCash = self.state.robberyStartCash
+	local cashBefore
+	if self.stats then
+		self.stats:updateCash()
+		cashBefore = self.stats:getCash()
+	end
 
 	if not self:pivot(self.settings.finalCFrame, nil, label) then
 		if self.stats then
@@ -1709,8 +1740,8 @@ function Core:collect(label)
 	if self.stats then
 		self.stats:updateCash()
 		local cash = self.stats:getCash()
-		if startCash and cash and cash > startCash then
-			earned = math.max(earned, cash - startCash)
+		if cashBefore and cash and cash > cashBefore then
+			earned = math.max(earned, cash - cashBefore)
 		end
 	end
 
@@ -1731,7 +1762,6 @@ function Core:collect(label)
 
 	self.state.currentRobbery = nil
 	self.state.robberyStartedAt = nil
-	self.state.robberyStartCash = nil
 	self.state.cashWatch = nil
 	self.state.lastBagValue = nil
 	return true

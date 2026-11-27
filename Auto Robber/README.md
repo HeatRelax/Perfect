@@ -47,18 +47,20 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 | Club | `$12000` |
 | Jewelry | `$10000` |
 
-A robbery only counts loot that belongs to its own round. When a robbery
-starts, the script snapshots the visible bag (`bagStart`). Completion uses the
-bag's growth since that snapshot, so a stale bag left over from the previous
-heist contributes zero instead of instantly completing the next robbery (that
-is what logged Casino and Bank as `+$12,000 (0s)`). If the HUD resets the bag
-below the snapshot, the value itself is this round's loot. The earned amount
-is capped at the heist's known maximum because the game can never pay more
-than the doubled target. When a bag runs out of loot before that target
-(Jewelry caps at whatever the round's boxes hold, often `$5,000`), the game
-switches the bag label from `Cash Reward` to `Robbery Success!`; the script
-accepts that signal after real progress and collects instead of waiting for
-the farm timeout.
+A robbery only counts loot that belongs to its own round. After arriving, the
+script waits `bagSettleTime` (1.5s) for the bag HUD to stop showing the
+previous heist's amount, then treats whatever it shows as the stale baseline.
+A round only completes when the actual bag value reaches the heist's known
+maximum (the game can never pay more than the doubled target) and the bag has
+grown since that baseline. If the HUD drops to near zero, a fresh round
+started and its value is this round's loot; a drop to another large amount is
+just a different heist's stale bag, so the baseline moves instead. This is
+what stops a leftover `$12,000` Club bag from instantly completing Casino or
+Bank as `+$8,000 (0s)`.
+When a bag runs out of loot before the target (Jewelry caps at whatever the
+round's boxes hold, often `$5,000`), the game switches the bag label from
+`Cash Reward` to `Robbery Success!`; the script accepts that signal after real
+progress and collects instead of waiting for the farm timeout.
 
 The doubled targets stay in place so the script immediately takes advantage
 of the 2x bonus if the game re-enables it. While 2x is off, every round caps at
