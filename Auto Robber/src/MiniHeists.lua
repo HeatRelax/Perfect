@@ -1,7 +1,7 @@
 --[[
 	Mini heists: fast sweep of the $500 cash pickups scattered around the map.
 
-	Each pickup looks like this:
+	Each pickup looks like this while it is still robbable:
 
 		workspace.ObjectSelection.Cash (Model)
 			CashReward (IntValue)
@@ -9,14 +9,31 @@
 				Cash (Script)
 					Event (RemoteEvent)
 
+	Once the server accepts a pickup it marks the model as taken:
+
+		workspace.ObjectSelection.Cash (Model)
+			Nope
+				Cash (MeshPart)
+					Cash (Script)
+						Event (RemoteEvent)
+
 	The server only accepts the event when the player is close to the pickup,
-	so the sweep teleports onto each one, waits for the position to replicate,
-	fires, and immediately moves to the next nearest pickup. Collected pickups
-	respawn after roughly 20-60 seconds, so each sweep simply takes whatever is
-	available and never delays the robbery cycle.
+	so the sweep teleports onto the nearest one, fires, then polls for the
+	"Nope" marker. The moment it appears the pickup is confirmed collected and
+	the sweep moves straight to the next nearest pickup, with no fixed
+	post-fire delay.
 ]]
 
 local MiniHeists = {}
+
+-- A pickup is unavailable as soon as the server moves its Cash part under a
+-- "Nope" child (or removes the model entirely).
+local function isTaken(model)
+	if not model or not model.Parent then
+		return true
+	end
+	return model:FindFirstChild("Nope") ~= nil
+end
 
 local function findPickups(core)
 	local selection = core.services.workspace:FindFirstChild("ObjectSelection")
@@ -26,11 +43,12 @@ local function findPickups(core)
 
 	local pickups = {}
 	for _, child in ipairs(selection:GetChildren()) do
-		if child.Name == "Cash" and child:IsA("Model") then
+		if child.Name == "Cash" and child:IsA("Model") and not isTaken(child) then
 			local part = child:FindFirstChild("Cash")
 			local cashScript = part and part:FindFirstChild("Cash")
 			local event = cashScript and cashScript:FindFirstChild("Event")
-			if part and part:IsA("BasePart") and event and event:IsA("RemoteEvent") then
+			if part and part:IsA("BasePart") and part.Parent == child
+				and event and event:IsA("RemoteEvent") then
 				local reward = child:FindFirstChild("CashReward")
 				pickups[#pickups + 1] = {
 					model = child,
@@ -52,7 +70,10 @@ local function nearestPickup(core, pickups, used)
 
 	local best, bestDistance
 	for _, pickup in ipairs(pickups) do
-		if not used[pickup] and pickup.model.Parent and pickup.part.Parent then
+		if not used[pickup.model]
+			and not isTaken(pickup.model)
+			and pickup.part.Parent == pickup.model
+			and pickup.event.Parent then
 			local distance = (pickup.part.Position - root.Position).Magnitude
 			if not bestDistance or distance < bestDistance then
 				best = pickup
@@ -61,6 +82,19 @@ local function nearestPickup(core, pickups, used)
 		end
 	end
 	return best
+end
+
+-- Poll the model until the server marks it taken. Returns true on the frame
+-- the "Nope" structure shows up, false if the timeout expires first.
+local function waitForTaken(pickup, timeout, pollInterval)
+	local deadline = os.clock() + timeout
+	while os.clock() < deadline do
+		if isTaken(pickup.model) then
+			return true
+		end
+		task.wait(pollInterval)
+	end
+	return isTaken(pickup.model)
 end
 
 function MiniHeists.run(core)
@@ -103,8 +137,10 @@ function MiniHeists.run(core)
 	end
 
 	local preFireDelay = settings.preFireDelay or 0.25
-	local postFireDelay = settings.postFireDelay or 0.08
+	local confirmTimeout = settings.confirmTimeout or 0.4
+	local pollInterval = settings.pollInterval or 0.02
 	local tpHeight = settings.tpHeight or 3
+	local fireAttempts = settings.fireAttempts or 2
 
 	local noclipConnection = core:startNoclip(nil)
 	local used = {}
@@ -112,11 +148,7 @@ function MiniHeists.run(core)
 	local expected = 0
 	local aborted = false
 
-	for _ = 1, #pickups do
-		if core.stopped then
-			aborted = true
-			break
-		end
+	while not core.stopped do
 		if core:isDead() then
 			aborted = true
 			core:rejoin("mini heist sweep")
@@ -129,11 +161,15 @@ function MiniHeists.run(core)
 			break
 		end
 
+		-- Re-scan every iteration so the sweep always heads for the closest
+		-- pickup that is still available, including one that respawned while
+		-- the sweep was running.
+		pickups = findPickups(core)
 		local pickup = nearestPickup(core, pickups, used)
 		if not pickup then
 			break
 		end
-		used[pickup] = true
+		used[pickup.model] = true
 
 		local character = core.shared.getCharacter()
 		local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -146,14 +182,35 @@ function MiniHeists.run(core)
 		core:enforcePosition(targetCFrame, core.settings.movement.teleportLockTime)
 		task.wait(preFireDelay)
 
-		-- The pickup can despawn between the snapshot and this step. Only
-		-- fire at live events.
-		if pickup.part.Parent and pickup.event.Parent then
+		-- Fire, then poll for the "Nope" marker. If the server rejected the
+		-- attempt (the position may not have replicated yet), re-teleport and
+		-- try again. Move on the instant the pickup is confirmed taken.
+		local taken = false
+		for attempt = 1, fireAttempts do
+			if isTaken(pickup.model) then
+				break
+			end
+			if pickup.part.Parent ~= pickup.model or not pickup.event.Parent then
+				break
+			end
+
 			pickup.event:FireServer(pickup.part)
+			taken = waitForTaken(pickup, confirmTimeout, pollInterval)
+			if taken then
+				break
+			end
+
+			if attempt < fireAttempts then
+				character:PivotTo(targetCFrame)
+				core:enforcePosition(targetCFrame, core.settings.movement.teleportLockTime)
+				task.wait(preFireDelay)
+			end
+		end
+
+		if taken then
 			collected += 1
 			expected += pickup.reward
 		end
-		task.wait(postFireDelay)
 	end
 
 	core:stopNoclip(noclipConnection)

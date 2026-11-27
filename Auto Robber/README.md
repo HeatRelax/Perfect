@@ -94,11 +94,16 @@ script sweeps the ten `$500` cash pickups under
 `Event` RemoteEvent.
 
 The server only accepts a pickup when the player is close to it, so the sweep
-teleports onto each pickup, waits `miniHeists.preFireDelay` (0.25s) for the new
-position to replicate, fires the event with the pickup part, and immediately
-moves to the next nearest pickup. `miniHeists.postFireDelay` (0.08s) lets the
-event leave before the next teleport. A ten-pickup sweep takes about three
-seconds.
+teleports onto the nearest available pickup, waits `miniHeists.preFireDelay`
+(0.25s) for the new position to replicate, and fires the event with the pickup
+part. It then polls the model for the `Nope` child the server adds when a pickup
+is claimed (`Cash.Nope.Cash.Event`). As soon as `Nope` appears the pickup counts
+as collected and the sweep instantly heads for the next closest one — there is
+no fixed post-fire delay. If the server does not mark the pickup within
+`miniHeists.confirmTimeout` (0.4s), the sweep re-teleports and retries up to
+`miniHeists.fireAttempts` (2) times before moving on. The pickup list is
+re-scanned every step, so the sweep always targets the closest pickup that is
+still available, including one that respawned mid-sweep.
 
 Pickups respawn after roughly 20-60 seconds, so each sweep takes whatever is
 available at that boundary without delaying the robbery cycle. A sweep also

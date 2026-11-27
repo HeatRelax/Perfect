@@ -64,10 +64,13 @@ Shared.settings = {
 		enabled = true,
 
 		-- The server checks the player's replicated position, so give each
-		-- teleport a moment before firing. The post delay lets the event leave
-		-- before the next teleport moves the character away.
+		-- teleport a moment before firing. A pickup is confirmed collected as
+		-- soon as its model grows the "Nope" child; polling stops right there
+		-- and the sweep moves to the next nearest pickup with no post delay.
 		preFireDelay = 0.25,
-		postFireDelay = 0.08,
+		confirmTimeout = 0.4,
+		pollInterval = 0.02,
+		fireAttempts = 2,
 		tpHeight = 3,
 	},
 
