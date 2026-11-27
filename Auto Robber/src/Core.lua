@@ -205,16 +205,21 @@ function Core:setStep(text)
 		self.stepLabel.Text = "Step: " .. self.stepText
 	end
 
-	-- Matches both "Robbing Club ($12000)" and the newer
-	-- "Robbing Club ($12000, base $6000)" labels.
-	local robberyName, targetText = self.stepText:match("^Robbing (%a+) %((%$[%d,]+)")
+	-- Matches "Robbing Club ($12000, base $6000)" and falls back to the
+	-- older "Robbing Club ($12000)" label.
+	local robberyName, targetText, baseText = self.stepText:match(
+		"^Robbing (%a+) %((%$[%d,]+), base (%$[%d,]+)%)"
+	)
+	if not robberyName then
+		robberyName, targetText = self.stepText:match("^Robbing (%a+) %((%$[%d,]+)")
+	end
 	if robberyName and self.state.currentRobbery ~= robberyName then
 		self.state.currentRobbery = robberyName
 		self.state.robberyStartedAt = os.clock()
 
-		-- The previous heist's bag can still be visible for a moment after
-		-- the instant collect teleport. Snapshot it so the new robbery can
-		-- tell a stale bag from its own fresh one.
+		-- The bag HUD can still show the previous heist's amount for a while
+		-- after the instant collect teleport. Snapshot it so only this
+		-- heist's growth counts.
 		local statsHud = self.shared.getStatsHud()
 		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
 		local bagVisible = cashBagHud and cashBagHud.Visible or false
@@ -224,9 +229,12 @@ function Core:setStep(text)
 
 		self.state.cashWatch = targetText and {
 			target = targetText,
-			armed = false,
-			startValue = startValue,
-			sawHidden = not bagVisible,
+			base = baseText,
+			bagStart = startValue,
+			startedAt = os.clock(),
+			lastProgressAt = os.clock(),
+			earnedChangedAt = os.clock(),
+			bestEarned = 0,
 		} or nil
 		self.state.lastBagValue = nil
 
@@ -249,65 +257,110 @@ function Core:hasOtherPlayers()
 	return self.shared.hasOtherPlayers()
 end
 
-function Core:hasCash(targetText)
+-- Loot earned in the current heist, measured from the bag HUD. The bag can
+-- still show the previous heist's amount when a new heist starts, so only the
+-- growth since then counts. If the bag resets (value drops below the start)
+-- the value itself is the new heist's loot. The heist's known maximum caps it
+-- because the game can never pay more.
+function Core:getHeistEarned()
 	local watch = self.state.cashWatch
+	if not watch then
+		return 0
+	end
 
-	-- Read the bag once and use that same snapshot for both the target check
-	-- and the arming check. Two separate reads could see the HUD mid-reset and
-	-- combine an old "reached" amount with a new low amount.
+	local maxTarget = self.shared.parseCash(watch.target) or 0
+	local earned = 0
+
 	local statsHud = self.shared.getStatsHud()
 	local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
-	local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
-	local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
-	local label = self.shared.getCashLabel()
-	local value = label and self.shared.parseCash(label.Text)
-	local target = self.shared.parseCash(targetText)
-	local visible = cashBagHud and cashBagHud.Visible or false
-	local successText = stolenLabel and stolenLabel:IsA("TextLabel")
-		and string.lower(stolenLabel.Text) or ""
-	local gameSaysSuccess = string.find(successText, "success", 1, true) ~= nil
+	if cashBagHud and cashBagHud.Visible then
+		local label = self.shared.getCashLabel()
+		local value = label and self.shared.parseCash(label.Text)
+		if value then
+			if watch.bagStart and not watch.bagReset then
+				-- The HUD may keep the previous heist's amount and add this
+				-- heist's loot on top, or reset it and start from zero. Once
+				-- it drops below the start it has reset for this heist.
+				if value < watch.bagStart then
+					watch.bagReset = true
+				end
+			end
 
-	if not watch or watch.target ~= targetText then
-		return visible and value and target and value >= target
-	end
-
-	if not visible then
-		watch.sawHidden = true
-	end
-
-	if not watch.armed then
-		-- A bag only belongs to this robbery once the previous heist's HUD
-		-- has gone away, dropped below the old value, or was already empty
-		-- when this robbery started. This is what stops a stale bag from
-		-- completing the next robbery.
-		local fresh = watch.sawHidden
-			or watch.startValue == nil
-			or watch.startValue <= 0
-			or (value and value < watch.startValue)
-		if fresh and visible and value and target and value < target
-			and not gameSaysSuccess then
-			watch.armed = true
+			if watch.bagStart and not watch.bagReset then
+				earned = value - watch.bagStart
+			else
+				-- A reset bag (or one hidden when the heist started) shows
+				-- this heist's loot directly. Anything above the heist
+				-- maximum is a stale amount from a richer heist.
+				earned = value <= maxTarget and value or 0
+			end
 		end
 	end
 
-	if watch.armed and not watch.sawActive and not gameSaysSuccess then
-		watch.sawActive = true
+	if maxTarget > 0 and earned > maxTarget then
+		earned = maxTarget
 	end
 
-	-- Some heists (Jewelry) run out of loot before the doubled VIP target
-	-- can be reached. The game marks those bags "Robbery Success!" once
-	-- every box is empty, so collect instead of waiting for the timeout.
-	if watch.armed and watch.sawActive and gameSaysSuccess then
+	return earned, maxTarget
+end
+
+-- True once this heist has earned its expected payout (or run out of loot).
+function Core:hasCash(targetText)
+	local watch = self.state.cashWatch
+	if not watch or watch.target ~= targetText then
+		return self.shared.hasCash(targetText)
+	end
+
+	local earned, maxTarget = self:getHeistEarned()
+	local baseTarget = self.shared.parseCash(watch.base or "") or maxTarget
+	local now = os.clock()
+
+	if earned > (watch.bestEarned or 0) then
+		watch.bestEarned = earned
+		watch.earnedChangedAt = now
+		watch.lastProgressAt = now
+	end
+
+	local flat = now - (watch.earnedChangedAt or now)
+	local timing = self.settings.timing
+
+	-- The doubled target is the absolute maximum the game can pay. When it
+	-- is reached and stops growing, the round is finished.
+	if earned >= maxTarget and flat >= (timing.maxConfirmTime or 0.3) then
 		return true
 	end
 
-	return watch.armed and visible and value and target and value >= target
+	-- Without VIP the round caps at the base payout. Collect it as soon as
+	-- it stops growing instead of waiting for the doubled target.
+	if earned >= baseTarget and flat >= (timing.baseCapTimeout or 2) then
+		return true
+	end
+
+	-- Some heists (Jewelry) run out of loot before either cap. The game marks
+	-- those bags "Robbery Success!" once every box is empty.
+	if (watch.bestEarned or 0) > 0 then
+		local statsHud = self.shared.getStatsHud()
+		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
+		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
+		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
+			and string.lower(stolenLabel.Text) or ""
+		if string.find(successText, "success", 1, true) then
+			return true
+		end
+	end
+
+	return false
 end
 
--- True once the cash bag has been confirmed as this robbery's own bag.
-function Core:isBagFresh()
+-- True when the bag has shown no growth for `timeout` seconds, which means
+-- the heist is still on the server's loot cooldown.
+function Core:heistStalled(timeout)
 	local watch = self.state.cashWatch
-	return watch ~= nil and watch.armed == true
+	if not watch then
+		return false
+	end
+	return (os.clock() - (watch.lastProgressAt or watch.startedAt or os.clock())) >= timeout
 end
 
 -- Live round-trip time in seconds. Used to size the short waits that only
@@ -1161,6 +1214,17 @@ function Core:releasePosition()
 	self.positionLockUntil = 0
 end
 
+-- Pin the character to the heist's payout spot. Bank, Casino, and Club fill
+-- the bag only while the player stays on the marked position, so keep
+-- re-applying it for the whole farm instead of letting gravity or the game
+-- drag the character away after the short teleport lock.
+function Core:holdPosition(cframe)
+	if not cframe then
+		return
+	end
+	self:enforcePosition(cframe, self.settings.timing.maxFarmSeconds or 120)
+end
+
 function Core:pivot(targetCFrame, isLocked, label)
 	if label then
 		self:setStep(label)
@@ -1517,13 +1581,7 @@ end
 function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 	local display = name or targetText
 	local start = os.clock()
-	local bagSeenAt = nil
-	local lastBagValue
-	local lastBagChangeAt = os.clock()
 	local appearTimeout = self.settings.timing.bagAppearTimeout
-	local staleLimit = self.settings.timing.bagStaleTimeout
-	local baseTarget = baseTargetText and self.shared.parseCash(baseTargetText) or nil
-	local baseCapTimeout = self.settings.timing.baseCapTimeout or 2
 	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
@@ -1541,66 +1599,12 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 			return "fail"
 		end
 
-		-- A bag that never appears means this robbery is still on the
-		-- server's loot cooldown. Skip it instead of waiting the full farm
-		-- timeout. A stale "Robbery Success!" bag does not count as fresh.
-		local statsHud = self.shared.getStatsHud()
-		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
-		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
-		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
-		local label = self.shared.getCashLabel()
-		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
-			and string.lower(stolenLabel.Text) or ""
-		local isSuccess = string.find(successText, "success", 1, true) ~= nil
-		local bagFresh = self:isBagFresh()
-		if bagFresh and cashBagHud and cashBagHud.Visible and not isSuccess then
-			bagSeenAt = bagSeenAt or os.clock()
-		end
-
-		if appearTimeout and not bagSeenAt and (os.clock() - start) >= appearTimeout then
-			warn("No cash bag appeared for " .. display .. " - skipping")
+		-- The bag has shown no growth: this heist is still on the server's
+		-- loot cooldown. Skip it instead of waiting the full farm timeout.
+		if appearTimeout and self:heistStalled(appearTimeout) then
+			warn("No cash progress for " .. display .. " - skipping")
 			if self.stats then
 				self.stats:recordEvent("No loot at " .. display .. " (cooldown, skipped)")
-			end
-			return "timeout"
-		end
-
-		-- Another player can empty part of a round, leaving this bag capped
-		-- below the doubled target. Collect once the amount stops growing.
-		local bagValue = bagFresh and cashBagHud and cashBagHud.Visible
-			and not isSuccess and label
-			and self.shared.parseCash(label.Text) or nil
-		if bagValue and bagValue ~= lastBagValue then
-			lastBagValue = bagValue
-			lastBagChangeAt = os.clock()
-			self.state.lastBagValue = bagValue
-		end
-
-		-- The game's 2x bonus can be disabled, leaving every round capped at
-		-- half the doubled target. Collect that base cap quickly when it is
-		-- reached, but keep waiting for the full target when 2x is active.
-		if baseTarget and lastBagValue and lastBagValue >= baseTarget
-			and (os.clock() - lastBagChangeAt) >= baseCapTimeout then
-			warn("Base cap reached at " .. display .. " - collecting")
-			if self.stats then
-				self.stats:recordEvent(string.format(
-					"Base cap %s at %s (2x off, collected)",
-					self.shared.formatCash(label.Text),
-					display
-				))
-			end
-			return "timeout"
-		end
-
-		if staleLimit and lastBagValue and lastBagValue > 0
-			and (os.clock() - lastBagChangeAt) >= staleLimit then
-			warn("Cash bag stopped growing for " .. display .. " - collecting")
-			if self.stats then
-				self.stats:recordEvent(string.format(
-					"Bag capped at %s at %s (collected)",
-					self.shared.formatCash(label.Text),
-					display
-				))
 			end
 			return "timeout"
 		end
@@ -1629,6 +1633,13 @@ function Core:waitForCash(targetText, isLocked, label, name, baseTargetText)
 
 	self:setStep(label or ("Robbing (" .. targetText .. ")"))
 	local noclipConnection = self:startNoclip(isLocked)
+
+	-- The heist fills the bag only while the player stays on the payout
+	-- spot. Keep the character there for the whole farm.
+	local root = self.shared.getRoot()
+	if root then
+		self:holdPosition(root.CFrame)
+	end
 
 	self.state.midHeist = true
 	local outcome = self:runCashLoop(targetText, isLocked, name, baseTargetText)
@@ -1670,18 +1681,12 @@ function Core:collect(label)
 		robberyName = label:match("Collecting (%a+) cash")
 	end
 
-	-- Read the bag before the collect teleport hides/resets the HUD. Only a
-	-- bag confirmed as this robbery's own bag counts; a stale bag from the
-	-- previous heist must not be recorded as this robbery's payout.
-	local bagFresh = self:isBagFresh()
-	local bagValue = self.state.lastBagValue
-	if bagFresh then
-		local bagLabel = self.shared.getCashLabel()
-		local currentBag = bagLabel and self.shared.parseCash(bagLabel.Text)
-		if currentBag and (not bagValue or currentBag > bagValue) then
-			bagValue = currentBag
-		end
-	end
+	-- Snapshot the loot earned before the collect teleport resets the bag.
+	-- The total cash delta after the teleport is the real payout.
+	local watch = self.state.cashWatch
+	local bagEarned = watch and watch.bestEarned or 0
+	local earnedBefore = self:getHeistEarned()
+	local startCash = self.state.robberyStartCash
 
 	if not self:pivot(self.settings.finalCFrame, nil, label) then
 		if self.stats then
@@ -1690,8 +1695,8 @@ function Core:collect(label)
 		return false
 	end
 
-	-- The server grants the payout once it has seen the player at the base;
-	-- one round trip is enough. There is no reason to sit there afterwards.
+	-- The server grants the payout once it has seen the player at the base:
+	-- one round trip plus the 100ms buffer. There is no reason to sit there.
 	task.wait(self:getBaseWait())
 	self.state.midHeist = false
 
@@ -1700,23 +1705,24 @@ function Core:collect(label)
 		return false
 	end
 
-	if self.stats and bagFresh then
-		local startCash = self.state.robberyStartCash
-		local targetValue = self.state.cashWatch
-			and self.shared.parseCash(self.state.cashWatch.target)
-			or nil
-
+	local earned = earnedBefore
+	if self.stats then
 		self.stats:updateCash()
 		local cash = self.stats:getCash()
-		local earned = 0
-		if bagValue and bagValue > 0 then
-			earned = bagValue
-		elseif startCash and cash and cash > startCash then
-			earned = cash - startCash
-		elseif targetValue and targetValue > 0 then
-			earned = targetValue
+		if startCash and cash and cash > startCash then
+			earned = math.max(earned, cash - startCash)
 		end
+	end
 
+	local maxTarget = watch and self.shared.parseCash(watch.target) or nil
+	if maxTarget and maxTarget > 0 and earned > maxTarget then
+		earned = maxTarget
+	end
+
+	self.lastCollectEarned = earned
+	self.lastCollectHadProgress = (bagEarned > 0) or (earnedBefore > 0)
+
+	if self.stats and earned > 0 then
 		local duration = self.state.robberyStartedAt
 			and (os.clock() - self.state.robberyStartedAt)
 			or 0

@@ -47,17 +47,18 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 | Club | `$12000` |
 | Jewelry | `$10000` |
 
-A robbery only counts after its bag has been confirmed as its own. When a
-robbery starts, the script snapshots the visible bag (`startValue`). The bag
-must then hide, drop below that snapshot, or have been empty/unreadable at the
-start before it can arm; only an armed bag can satisfy the cash target, feed
-the base-cap timers, or be recorded in the stats. This is what stops the
-previous heist's still-visible bag from instantly completing the next robbery
-(Casino and Bank were being logged as `+$12,000 (0s)` before the guard). When
-a bag runs out of loot before the doubled target (Jewelry caps at whatever the
-round's boxes hold, often `$5,000`), the game switches the bag label from
-`Cash Reward` to `Robbery Success!`; the script accepts that signal and
-collects instead of waiting for the farm timeout.
+A robbery only counts loot that belongs to its own round. When a robbery
+starts, the script snapshots the visible bag (`bagStart`). Completion uses the
+bag's growth since that snapshot, so a stale bag left over from the previous
+heist contributes zero instead of instantly completing the next robbery (that
+is what logged Casino and Bank as `+$12,000 (0s)`). If the HUD resets the bag
+below the snapshot, the value itself is this round's loot. The earned amount
+is capped at the heist's known maximum because the game can never pay more
+than the doubled target. When a bag runs out of loot before that target
+(Jewelry caps at whatever the round's boxes hold, often `$5,000`), the game
+switches the bag label from `Cash Reward` to `Robbery Success!`; the script
+accepts that signal after real progress and collects instead of waiting for
+the farm timeout.
 
 The doubled targets stay in place so the script immediately takes advantage
 of the 2x bonus if the game re-enables it. While 2x is off, every round caps at
@@ -73,22 +74,31 @@ half the doubled target, so each robbery also defines a `baseTarget`:
 When the bag reaches its `baseTarget` and stops growing, the script collects
 it after `baseCapTimeout` (2s). If 2x is active, the bag keeps filling past
 the base cap toward the full doubled target, so nothing is collected early.
+At the doubled target the round is complete after `maxConfirmTime` (0.3s).
 
-Three timers keep depleted servers from wasting a full farm cycle:
+Two timers keep depleted servers from wasting a full farm cycle:
 
-- `bagAppearTimeout` (12s): if no bag appears, the robbery is still on the
-  server's loot cooldown, so it is skipped and the next robbery starts.
-- `bagStaleTimeout` (6s): if a visible bag stops growing below the base cap
-  (another player already took part of the round), the script collects the
-  capped amount instead of waiting for `maxFarmSeconds` (120s). Jewelry uses
-  the same setting for its flat-bag exit inside the box farm.
-- `baseCapTimeout` (2s): a bag that reached its base cap is collected quickly
-  instead of waiting for the full stale timeout.
+- `bagAppearTimeout` (20s): if the bag has not grown at all, the robbery is
+  still on the server's loot cooldown, so it is skipped and the next robbery
+  starts.
+- `maxFarmSeconds` (120s): the hard cap on any single farm.
 
-Skips and capped collections are recorded in the event log, for example
-`No loot at Club (cooldown, skipped)`,
-`Base cap $6,000 at Club (2x off, collected)`, and
-`Bag capped at $3,000 at Bank (collected)`.
+Skips are recorded in the event log, for example
+`No loot at Club (cooldown, skipped)`.
+
+## Bank, Casino, and Club farm spots
+
+These three heists fill the bag automatically while the character stands on
+the marked payout spot. After the teleport, `core:waitForCash` calls
+`core:holdPosition(root.CFrame)`, which re-applies the position on every
+`RunService.Stepped` frame for the whole farm, so gravity, physics, or server
+position correction cannot drag the character off the spot.
+
+Casino is the only one that needs an action: the four levers must be pushed to
+open the vault. The script fires them every `timing.leverRefire` (0.5s) until
+the bag starts growing, then stops and lets the game fill the bag. Bank and
+Club do no actions at all: the character stays put until the bag reaches its
+determined amount, then the script teleports to the collect point.
 
 ## Mini heists
 
@@ -129,6 +139,8 @@ The lock is timed rather than indefinite, so later movement and teleports are
 never blocked:
 
 - `movement.teleportLockTime` (0.6s) — how long the target is re-applied.
+- `core:holdPosition(cframe)` extends the same lock for the whole farm
+  (`maxFarmSeconds`); Bank, Casino, and Club use it so the bag keeps filling.
 - A newer teleport replaces the target and restarts the timer.
 - `core:releasePosition()` clears it early; the Jewelry vent calls this so the
   temporary vent-trigger CFrame is not overwritten.
@@ -139,10 +151,11 @@ never blocked:
 The collect step no longer sleeps a fixed 1.5s at the criminal base.
 `Core:getPing()` reads `Player:GetNetworkPing()` (falling back to the `Stats`
 service's `Data Ping`) and `Core:getBaseWait()` waits one round trip plus a
-50ms buffer, clamped to 0.1-0.75s. The server pays out when it registers the
+100ms buffer, clamped to 0.1-1.0s. The server pays out when it registers the
 player at the base, so the next robbery starts as soon as that round trip
-finishes. Per-robbery stats use the bag amount captured before the collect
-teleport, so nothing waits for the total cash HUD to settle.
+finishes. Per-robbery stats use the increase of the total cash HUD across the
+collect wait, capped at the heist's maximum; the bag growth measured during
+the heist is the fallback if the total HUD has not updated yet.
 
 The same live wait is used before each mini-heist fire. The Jewelry vent is
 fully event-driven: `workspace.JewelryStore.JewelryVent.Vent.Break` is watched
@@ -337,17 +350,18 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | `core:travel(destination, isLocked, label)` | respawn via Prisoners if needed, noclip teleport |
 | `core:enforcePosition(cframe, duration)` | re-apply a teleport target on `RunService.Stepped` |
 | `core:releasePosition()` | clear the active teleport lock |
-| `core:collect(label)` | teleport to the criminal base, wait one live ping, record the payout |
+| `core:collect(label)` | teleport to the criminal base, wait ping + 100ms, record the real payout |
 | `core:getPing()` | live round-trip time in seconds (Player API, Stats fallback) |
-| `core:getBaseWait()` | ping plus a 50ms buffer, clamped to 0.1-0.75s |
-| `core:waitForCash(target, isLocked, label)` | generic wait-until-cash flow |
+| `core:getBaseWait()` | ping plus a 100ms buffer, clamped to 0.1-1.0s |
+| `core:waitForCash(target, isLocked, label)` | generic wait-until-cash flow, pins the farm spot |
 | `core:waitForSolo(isLocked, label)` | idle while other players are present |
 | `core:guard(isLocked)` | solo, alive, and heist-open check |
 | `core:guardLock(isLocked)` | heist-open check only |
 | `core:tweenTo(position, speed, isLocked)` | smooth movement |
 | `core:startNoclip(isLocked)` / `core:stopNoclip(conn)` | noclip pump |
-| `core:hasCash(target)` | reads the cash bag HUD (`CashBagHUD.Cash.Amount`) and only accepts this robbery's fresh bag |
-| `core:isBagFresh()` | true once the bag has been confirmed as the current robbery's own bag |
+| `core:hasCash(target)` | true once this heist has earned its expected payout |
+| `core:getHeistEarned()` | bag growth since the heist started, capped at the heist maximum |
+| `core:holdPosition(cframe)` | pin the character to the farm spot for the whole heist |
 | `core:lockChecker(name, lockWhenMissing)` | builds a heist lock checker |
 | `core:setStep(label)` | updates the overlay status |
 | `core:rejoin()` | rejoin with the Infinite Yield method |

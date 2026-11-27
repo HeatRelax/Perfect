@@ -66,6 +66,13 @@ local function farm(core, isLocked)
 
 	core:setStep("Robbing Casino (" .. Casino.targetCash .. ", base " .. Casino.baseTarget .. ")")
 
+	-- Once the levers open the vault the game fills the bag by itself while
+	-- the player stays on the payout spot.
+	local root = core:getRoot()
+	if root then
+		core:holdPosition(root.CFrame)
+	end
+
 	local events = collectLeverEvents(core)
 	local deadline = os.clock() + 3
 	while #events < 4 and os.clock() < deadline do
@@ -83,15 +90,10 @@ local function farm(core, isLocked)
 
 	local start = os.clock()
 	local nextFire = os.clock() + core.settings.timing.leverRefire
-	local bagSeenAt = nil
 	local appearTimeout = core.settings.timing.bagAppearTimeout
-	local lastBagValue
-	local lastBagChangeAt = os.clock()
-	local staleLimit = core.settings.timing.bagStaleTimeout
-	local baseTarget = core.shared.parseCash(Casino.baseTarget)
-	local baseCapTimeout = core.settings.timing.baseCapTimeout or 2
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
+	local leversOpen = false
 
 	while not core:hasCash(Casino.targetCash) do
 		if isLocked() or core:isDead() then
@@ -109,64 +111,23 @@ local function farm(core, isLocked)
 			end
 		end
 
-		local statsHud = core.shared.getStatsHud()
-		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
-		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
-		local stolenLabel = bagCash and bagCash:FindFirstChild("CashStolen")
-		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
-			and string.lower(stolenLabel.Text) or ""
-		local isSuccess = string.find(successText, "success", 1, true) ~= nil
-		local bagFresh = core:isBagFresh()
-		if bagFresh and cashBagHud and cashBagHud.Visible and not isSuccess then
-			bagSeenAt = bagSeenAt or os.clock()
+		-- The bag moving proves the vault is open; from then on the game
+		-- fills it automatically and the levers no longer need firing.
+		if not leversOpen and core:getHeistEarned() > 0 then
+			leversOpen = true
 		end
 
-		if appearTimeout and not bagSeenAt and (os.clock() - start) >= appearTimeout then
-			warn("No cash bag appeared for Casino - skipping")
+		-- If nothing has filled the bag within the timeout, the round is
+		-- still on the server's loot cooldown.
+		if appearTimeout and core:heistStalled(appearTimeout) then
+			warn("No cash progress at Casino - skipping")
 			if core.stats then
 				core.stats:recordEvent("No loot at Casino (cooldown, skipped)")
 			end
 			break
 		end
 
-		-- Another player can empty part of a round, leaving this bag capped
-		-- below the doubled target. Collect once the amount stops growing.
-		local label = core.shared.getCashLabel()
-		local bagValue = bagFresh and cashBagHud and cashBagHud.Visible
-			and not isSuccess and label
-			and core.shared.parseCash(label.Text) or nil
-		if bagValue and bagValue ~= lastBagValue then
-			lastBagValue = bagValue
-			lastBagChangeAt = os.clock()
-			core.state.lastBagValue = bagValue
-		end
-
-		-- 2x can be disabled, capping the round at half the doubled target.
-		if baseTarget and lastBagValue and lastBagValue >= baseTarget
-			and (os.clock() - lastBagChangeAt) >= baseCapTimeout then
-			warn("Base cap reached at Casino - collecting")
-			if core.stats then
-				core.stats:recordEvent(string.format(
-					"Base cap %s at Casino (2x off, collected)",
-					core.shared.formatCash(label.Text)
-				))
-			end
-			break
-		end
-
-		if staleLimit and lastBagValue and lastBagValue > 0
-			and (os.clock() - lastBagChangeAt) >= staleLimit then
-			warn("Cash bag stopped growing for Casino - collecting")
-			if core.stats then
-				core.stats:recordEvent(string.format(
-					"Bag capped at %s at Casino (collected)",
-					core.shared.formatCash(label.Text)
-				))
-			end
-			break
-		end
-
-		if os.clock() >= nextFire then
+		if not leversOpen and os.clock() >= nextFire then
 			events = collectLeverEvents(core)
 			fireLevers(events, movement.firesPerLever)
 			nextFire = os.clock() + core.settings.timing.leverRefire

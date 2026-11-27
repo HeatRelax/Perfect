@@ -82,15 +82,20 @@ Shared.settings = {
 		-- full timeout.
 		ventWait = 1.5,
 		leverRefire = 0.5,
-		bagAppearTimeout = 12,
-		bagStaleTimeout = 6,
+		bagAppearTimeout = 20,
+
+		-- A round caps at the base payout without VIP and at twice the base
+		-- with it. Once the earned amount reaches a cap and stays flat for
+		-- this long, the heist is done and the bag can be delivered.
 		baseCapTimeout = 2,
+		maxConfirmTime = 0.3,
 		maxFarmSeconds = 120,
 
-		-- Base wait = live ping + buffer, clamped to these bounds.
-		baseWaitBuffer = 0.05,
+		-- Base wait = live ping + buffer, clamped to these bounds. The
+		-- server needs the collect position plus one round trip to pay out.
+		baseWaitBuffer = 0.1,
 		baseWaitMin = 0.1,
-		baseWaitMax = 0.75,
+		baseWaitMax = 1.0,
 	},
 
 	idle = {

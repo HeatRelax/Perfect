@@ -353,11 +353,6 @@ local function farm(core, isLocked, existingPlatform)
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
 
-	local lastBagValue
-	local lastBagChangeAt = os.clock()
-	local staleLimit = core.settings.timing.bagStaleTimeout or 6
-	local baseTarget = core.shared.parseCash(Jewelry.baseTarget)
-	local baseCapTimeout = core.settings.timing.baseCapTimeout or 2
 	local heartbeat = core.services.runService.Heartbeat
 
 	local tour = {}
@@ -429,21 +424,10 @@ local function farm(core, isLocked, existingPlatform)
 			break
 		end
 
-		-- Read the bag a few times per second. If the round has already paid
-		-- out everything it can, the amount stays flat even while boxes break.
-		if os.clock() >= nextBagCheck then
+		-- Debug: report the bag growth a few times per second.
+		if debug and os.clock() >= nextBagCheck then
 			nextBagCheck = os.clock() + 0.1
-			local cashLabel = core.shared.getCashLabel()
-			local bagValue = core:isBagFresh() and cashLabel
-				and core.shared.parseCash(cashLabel.Text) or nil
-			if bagValue and bagValue ~= lastBagValue then
-				lastBagValue = bagValue
-				lastBagChangeAt = os.clock()
-				core.state.lastBagValue = bagValue
-				if debug then
-					print("[JEWDBG] bag", bagValue, "at", string.format("%.1f", elapsed))
-				end
-			end
+			print("[JEWDBG] earned", core:getHeistEarned(), "at", string.format("%.1f", elapsed))
 		end
 
 		local boxes = collectBoxes(core, folder)
@@ -452,12 +436,6 @@ local function farm(core, isLocked, existingPlatform)
 			-- payout, then collect whatever the round awarded.
 			if debug then
 				print("[JEWDBG] no live boxes at", string.format("%.1f", elapsed))
-			end
-			local cashLabel = core.shared.getCashLabel()
-			local bagValue = core:isBagFresh() and cashLabel
-				and core.shared.parseCash(cashLabel.Text) or nil
-			if bagValue then
-				core.state.lastBagValue = bagValue
 			end
 			task.wait(0.4)
 			break
@@ -559,27 +537,6 @@ local function farm(core, isLocked, existingPlatform)
 			if debug then
 				print("[JEWDBG] volley", fired, "boxes at", string.format("%.1f", elapsed))
 			end
-		end
-
-		-- When 2x is off the round caps at half the doubled target. Collect
-		-- that base cap quickly; keep the longer limit for partial caps.
-		local flatLimit = staleLimit
-		if baseTarget and lastBagValue and lastBagValue >= baseTarget then
-			flatLimit = baseCapTimeout
-		end
-
-		if lastBagValue and lastBagValue > 0 and (os.clock() - lastBagChangeAt) >= flatLimit then
-			if debug then
-				print("[JEWDBG] bag flat at", lastBagValue, "for", flatLimit, "s")
-			end
-			local cashLabel = core.shared.getCashLabel()
-			if flatLimit == baseCapTimeout and core.stats and cashLabel then
-				core.stats:recordEvent(string.format(
-					"Base cap %s at Jewelry (2x off, collected)",
-					core.shared.formatCash(cashLabel.Text)
-				))
-			end
-			break
 		end
 	end
 
