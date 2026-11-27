@@ -139,11 +139,13 @@ player at the base, so the next robbery starts as soon as that round trip
 finishes. Per-robbery stats use the bag amount captured before the collect
 teleport, so nothing waits for the total cash HUD to settle.
 
-The same live wait is used before each mini-heist fire, and the Jewelry vent
-now exits as soon as the character actually moves instead of sleeping the full
-`timing.ventWait` (1.5s cap). Other checks were tightened as well: the cash
-target polls every 50ms, guards every 50ms, Casino levers refire every 0.5s,
-and Jewelry volleys every 0.1s.
+The same live wait is used before each mini-heist fire. The Jewelry vent is
+fully event-driven: `workspace.JewelryStore.JewelryVent.Vent.Break` is watched
+before the trigger fires, and the farm tween/volleys start on the frame that
+sound plays. Character movement remains a fallback if the sound is missing,
+with `timing.ventWait` (1.5s) only as a safety cap. Other checks were
+tightened as well: the cash target polls every 50ms, guards every 50ms, Casino
+levers refire every 0.5s, and Jewelry volleys every 0.1s.
 
 ## Jewelry box farm
 

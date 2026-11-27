@@ -250,22 +250,68 @@ local function enterVent(core, isLocked)
 	return false
 end
 
--- The vent teleport is server-driven. Wait for the character to actually
--- move instead of always sleeping the full vent timeout.
-local function waitForVentTeleport(core, isLocked, fromPosition, timeout)
-	core:setStep("Waiting at Jewelry vent...")
+local function findVentSound(core)
+	local store = core.services.workspace:FindFirstChild("JewelryStore")
+	local jewelryVent = store and store:FindFirstChild("JewelryVent")
+	local vent = jewelryVent and jewelryVent:FindFirstChild("Vent")
+	local sound = vent and vent:FindFirstChild("Break")
+	if sound and sound:IsA("Sound") then
+		return sound
+	end
+	return nil
+end
 
-	if not fromPosition then
-		return core:waitGuarded(math.min(timeout or 1, 0.5), isLocked)
+-- Connect before the trigger fires so the server's Play call cannot be
+-- missed. The farm starts the instant the vent break sound begins.
+local function watchVentSound(sound)
+	if not sound then
+		return nil, function() end
 	end
 
-	local deadline = os.clock() + (timeout or 1)
+	local started = false
+	local connections = {}
+
+	local function markStarted()
+		started = true
+	end
+
+	table.insert(connections, sound.Played:Connect(markStarted))
+	table.insert(connections, sound:GetPropertyChangedSignal("Playing"):Connect(function()
+		if sound.Playing then
+			markStarted()
+		end
+	end))
+
+	local function cleanup()
+		for _, connection in ipairs(connections) do
+			connection:Disconnect()
+		end
+	end
+
+	return function()
+		return started
+	end, cleanup
+end
+
+-- The vent break sound is the server's own "vent opened" signal, so start
+-- the farm on the frame it plays. Horizontal movement stays as a fallback
+-- for rounds where the sound is missing, and the timeout is only a safety
+-- cap rather than a fixed wait.
+local function waitForVentStart(core, isLocked, fromPosition, soundStarted, timeout)
+	core:setStep("Waiting at Jewelry vent...")
+
+	local deadline = os.clock() + (timeout or 1.5)
 	while os.clock() < deadline do
 		if not core:guard(isLocked) then
 			return false
 		end
+
+		if soundStarted and soundStarted() then
+			return true
+		end
+
 		local root = core:getRoot()
-		if root then
+		if root and fromPosition then
 			-- Compare horizontal movement only: startFarmGuard has already
 			-- snapped the character vertically, so a Y delta is not proof
 			-- that the server vent teleport happened.
@@ -275,7 +321,8 @@ local function waitForVentTeleport(core, isLocked, fromPosition, timeout)
 				return true
 			end
 		end
-		task.wait(0.05)
+
+		task.wait(0.02)
 	end
 	return true
 end
@@ -589,9 +636,15 @@ function Jewelry.run(core)
 		platform = nil
 	end
 
+	-- Watch the vent break sound before the trigger fires so a fast Play call
+	-- is not missed. Its first frame is the signal to start farming.
+	local ventSound = findVentSound(core)
+	local soundStarted, stopSoundWatch = watchVentSound(ventSound)
+
 	core:setNoclip(true)
 	local entered, ventPosition = enterVent(core, isLocked)
 	if not entered then
+		stopSoundWatch()
 		cleanup()
 		core.state.midHeist = false
 		return false
@@ -600,7 +653,9 @@ function Jewelry.run(core)
 	core:setNoclip(false)
 	fallGuard = startFarmGuard(core, farmRootY)
 
-	if not waitForVentTeleport(core, isLocked, ventPosition, timing.ventWait) then
+	local vented = waitForVentStart(core, isLocked, ventPosition, soundStarted, timing.ventWait)
+	stopSoundWatch()
+	if not vented then
 		cleanup()
 		core.state.midHeist = false
 		return false
