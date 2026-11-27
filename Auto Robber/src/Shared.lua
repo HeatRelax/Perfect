@@ -96,6 +96,10 @@ Shared.settings = {
 		maxConfirmTime = 0.3,
 		maxFarmSeconds = 120,
 
+		-- Jewelry waits through restock gaps until the bag reaches the full
+		-- target, so it gets a longer safety cap than the other heists.
+		jewelryMaxFarmSeconds = 180,
+
 		-- Base wait = live ping + buffer, clamped to these bounds. The
 		-- server needs the collect position plus one round trip to pay out.
 		baseWaitBuffer = 0.1,

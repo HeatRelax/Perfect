@@ -57,10 +57,11 @@ started and its value is this round's loot; a drop to another large amount is
 just a different heist's stale bag, so the baseline moves instead. This is
 what stops a leftover `$12,000` Club bag from instantly completing Casino or
 Bank as `+$8,000 (0s)`.
-When a bag runs out of loot before the target (Jewelry caps at whatever the
-round's boxes hold, often `$5,000`), the game switches the bag label from
-`Cash Reward` to `Robbery Success!`; the script accepts that signal after real
-progress and collects instead of waiting for the farm timeout.
+Jewelry keeps farming through empty periods: when every box is broken, the
+script waits at the farm height and rescans until the store restocks, then
+continues firing. It only collects once the bag reaches the full target (or
+the Jewelry farm cap is hit), so the `Robbery Success!` label no longer ends a
+round early.
 
 The doubled targets stay in place so the script immediately takes advantage
 of the 2x bonus if the game re-enables it. While 2x is off, every round caps at
@@ -77,13 +78,15 @@ When the bag reaches its `baseTarget` and stops growing, the script collects
 it after `baseCapTimeout` (2s). If 2x is active, the bag keeps filling past
 the base cap toward the full doubled target, so nothing is collected early.
 At the doubled target the round is complete after `maxConfirmTime` (0.3s).
+Jewelry skips the base-cap shortcut and always waits for the full target,
+because its boxes restock.
 
 Two timers keep depleted servers from wasting a full farm cycle:
 
 - `bagAppearTimeout` (20s): if the bag has not grown at all, the robbery is
   still on the server's loot cooldown, so it is skipped and the next robbery
   starts.
-- `maxFarmSeconds` (120s): the hard cap on any single farm.
+- `maxFarmSeconds` (120s, Jewelry 180s): the hard cap on any single farm.
 
 Skips are recorded in the event log, for example
 `No loot at Club (cooldown, skipped)`.
@@ -190,6 +193,11 @@ when the farm ends. Settings live in `Shared.settings.movement`:
 - `jewelryPlatform` (true) — enable the farm floor.
 - `jewelryPlatformMargin` (30) — extra studs around the box bounds.
 - `jewelryPlatformThickness` (2) — slab thickness.
+
+When every box is broken, the farm does not stop: it keeps the character at
+the farming height, waits 0.1s per scan, and resumes the volleys as soon as
+the store restocks. The round is collected only at the full `$10000` target;
+`jewelryMaxFarmSeconds` (180s) is the safety cap.
 
 The server registers at most one hit per box per volley and only for boxes near
 the player. Firing every box means the closest cluster breaks while the

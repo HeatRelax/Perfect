@@ -356,14 +356,17 @@ function Core:hasCash(targetText)
 	end
 
 	-- Without VIP the round caps at the base payout. Collect it once the bag
-	-- has stopped growing.
-	if fresh and value and value >= baseTarget and flat >= (timing.baseCapTimeout or 2) then
+	-- has stopped growing. Heists that must reach their full target (Jewelry)
+	-- skip this shortcut because their loot restocks and can keep filling.
+	if not watch.requireMax and fresh and value and value >= baseTarget
+		and flat >= (timing.baseCapTimeout or 2) then
 		return true
 	end
 
-	-- Some heists (Jewelry) run out of loot before either cap. The game marks
-	-- those bags "Robbery Success!" once every box is empty.
-	if (watch.bestEarned or 0) > 0 then
+	-- Some heists can run out of loot before either cap. The game marks
+	-- those bags "Robbery Success!" once every box is empty. Jewelry opts
+	-- out (requireMax) because its boxes restock and the bag can still fill.
+	if not watch.requireMax and (watch.bestEarned or 0) > 0 then
 		local statsHud = self.shared.getStatsHud()
 		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
 		local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")

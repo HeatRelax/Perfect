@@ -335,6 +335,13 @@ local function farm(core, isLocked, existingPlatform)
 	local label = "Robbing Jewelry (" .. Jewelry.targetCash .. ", base " .. Jewelry.baseTarget .. ")"
 	core:setStep(label)
 
+	-- Jewelry boxes restock, so a bag that is not full yet can keep filling.
+	-- Never collect early: wait for the full target even when every box is
+	-- currently broken.
+	if core.state.cashWatch then
+		core.state.cashWatch.requireMax = true
+	end
+
 	local workspace = core.services.workspace
 	local store = workspace:FindFirstChild("JewelryStore")
 	local folder = store and store:FindFirstChild("JewelryBoxes")
@@ -347,7 +354,8 @@ local function farm(core, isLocked, existingPlatform)
 	end
 
 	local movement = core.settings.movement
-	local maxFarmSeconds = core.settings.timing.maxFarmSeconds
+	local maxFarmSeconds = core.settings.timing.jewelryMaxFarmSeconds
+		or core.settings.timing.maxFarmSeconds
 	local debug = getgenv().MadCityAutoRobberDebugJewelry
 	local start = os.clock()
 	local noclipConnection = core:startNoclip(isLocked)
@@ -431,16 +439,6 @@ local function farm(core, isLocked, existingPlatform)
 		end
 
 		local boxes = collectBoxes(core, folder)
-		if #boxes == 0 then
-			-- Everything is broken. Give the server a moment to finalize the
-			-- payout, then collect whatever the round awarded.
-			if debug then
-				print("[JEWDBG] no live boxes at", string.format("%.1f", elapsed))
-			end
-			task.wait(0.4)
-			break
-		end
-
 		local root = core:getRoot()
 		if not root then
 			task.wait(0.05)
@@ -452,6 +450,34 @@ local function farm(core, isLocked, existingPlatform)
 		-- missed step then produces a tiny drop instead of a freefall.
 		root.AssemblyLinearVelocity = Vector3.zero
 		root.AssemblyAngularVelocity = Vector3.zero
+
+		if #boxes == 0 then
+			-- Every box is broken. The store restocks them quickly, so keep
+			-- the farm alive and rescan instead of collecting a partial bag.
+			if debug then
+				print("[JEWDBG] waiting for restock at", string.format("%.1f", elapsed))
+			end
+
+			if movement.jewelryPlatform ~= false and (not platform or not platform.Parent) then
+				local allBoxes = collectAllBoxes(core, folder)
+				if #allBoxes > 0 then
+					local ok, created = pcall(
+						createFarmPlatform,
+						core,
+						allBoxes,
+						yOffset,
+						movement.jewelryPlatformMargin,
+						movement.jewelryPlatformThickness
+					)
+					if ok and created then
+						platform = created
+					end
+				end
+			end
+
+			task.wait(0.1)
+			continue
+		end
 
 		-- Defensive: recreate the platform if the game ever removes it.
 		if movement.jewelryPlatform ~= false and (not platform or not platform.Parent) then
