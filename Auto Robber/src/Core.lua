@@ -182,6 +182,7 @@ function Core.new(shared, performance, stats)
 		robberyStartedAt = nil,
 		robberyStartCash = nil,
 		cashWatch = nil,
+		lastBagValue = nil,
 	}
 	self.stepText = "Starting..."
 	self.stepLabel = nil
@@ -192,6 +193,8 @@ function Core.new(shared, performance, stats)
 	self.positionLockCFrame = nil
 	self.positionLockUntil = 0
 	self.positionLockConnection = nil
+	self.pingCached = nil
+	self.pingCachedAt = 0
 	self.stopped = false
 	return self
 end
@@ -209,6 +212,7 @@ function Core:setStep(text)
 		self.state.currentRobbery = robberyName
 		self.state.robberyStartedAt = os.clock()
 		self.state.cashWatch = targetText and { target = targetText, armed = false } or nil
+		self.state.lastBagValue = nil
 
 		if self.stats then
 			self.stats:updateCash()
@@ -269,6 +273,55 @@ function Core:hasCash(targetText)
 	end
 
 	return reached and watch.armed
+end
+
+-- Live round-trip time in seconds. Used to size the short waits that only
+-- exist so the server sees the new position before the next teleport.
+function Core:getPing()
+	local now = os.clock()
+	if self.pingCached and (now - self.pingCachedAt) < 1 then
+		return self.pingCached
+	end
+
+	local ping
+	local player = self.shared.getPlayer()
+	if player and type(player.GetNetworkPing) == "function" then
+		local ok, value = pcall(function()
+			return player:GetNetworkPing()
+		end)
+		if ok and type(value) == "number" and value > 0 then
+			ping = value > 5 and value / 1000 or value
+		end
+	end
+
+	if not ping then
+		local statsService = self.services.statsService
+		if statsService then
+			local ok, value = pcall(function()
+				return statsService.Network.ServerStatsItem["Data Ping"]:GetValue()
+			end)
+			if ok and type(value) == "number" and value > 0 then
+				ping = value > 5 and value / 1000 or value
+			end
+		end
+	end
+
+	ping = ping or 0.2
+	self.pingCached = ping
+	self.pingCachedAt = now
+	return ping
+end
+
+-- The criminal base only needs the position to replicate once. One round trip
+-- plus a small buffer is enough for the server to register and pay out.
+function Core:getBaseWait()
+	local timing = self.settings.timing
+	local ping = self:getPing()
+	return math.clamp(
+		ping + (timing.baseWaitBuffer or 0.05),
+		timing.baseWaitMin or 0.1,
+		timing.baseWaitMax or 0.75
+	)
 end
 
 function Core:getInstancePosition(instance)
@@ -1102,7 +1155,7 @@ function Core:waitGuarded(seconds, isLocked, label)
 		if not self:guard(isLocked) then
 			return false
 		end
-		task.wait(0.1)
+		task.wait(0.05)
 	end
 	return true
 end
@@ -1139,7 +1192,7 @@ function Core:waitForGame()
 		workspace:GetPropertyChangedSignal("CurrentCamera"):Wait()
 	end
 
-	task.wait(0.3)
+	task.wait(0.1)
 end
 
 function Core:createPlayerListOverlay()
@@ -1435,7 +1488,7 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 	local appearTimeout = self.settings.timing.bagAppearTimeout
 	local staleLimit = self.settings.timing.bagStaleTimeout
 	local baseTarget = baseTargetText and self.shared.parseCash(baseTargetText) or nil
-	local baseCapTimeout = self.settings.timing.baseCapTimeout or 4
+	local baseCapTimeout = self.settings.timing.baseCapTimeout or 2
 	while not self.stopped and not self:hasCash(targetText) do
 		if (isLocked and isLocked()) or self:isDead() then
 			self:rejoin()
@@ -1483,6 +1536,7 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 		if bagValue and bagValue ~= lastBagValue then
 			lastBagValue = bagValue
 			lastBagChangeAt = os.clock()
+			self.state.lastBagValue = bagValue
 		end
 
 		-- The game's 2x bonus can be disabled, leaving every round capped at
@@ -1523,7 +1577,7 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 			return "timeout"
 		end
 
-		task.wait(0.2)
+		task.wait(0.05)
 	end
 	if self.stopped then
 		return "fail"
@@ -1579,56 +1633,61 @@ function Core:collect(label)
 		robberyName = label:match("Collecting (%a+) cash")
 	end
 
+	-- Read the bag before the collect teleport hides/resets the HUD. This is
+	-- the exact reward for this robbery, so stats no longer need to poll the
+	-- total cash HUD for several seconds afterwards.
+	local bagValue = self.state.lastBagValue
+	local bagLabel = self.shared.getCashLabel()
+	local currentBag = bagLabel and self.shared.parseCash(bagLabel.Text)
+	if currentBag and (not bagValue or currentBag > bagValue) then
+		bagValue = currentBag
+	end
+
 	if not self:pivot(self.settings.finalCFrame, nil, label) then
 		if self.stats then
 			self.stats:recordRobberyFailure(robberyName, "collect teleport failed")
 		end
 		return false
 	end
-	if not self:waitGuarded(self.settings.timing.collectWait, nil, label) then
-		if self.stats then
-			self.stats:recordRobberyFailure(robberyName, "collect wait failed")
-		end
+
+	-- The server grants the payout once it has seen the player at the base;
+	-- one round trip is enough. There is no reason to sit there afterwards.
+	task.wait(self:getBaseWait())
+	self.state.midHeist = false
+
+	if self:isDead() then
+		self:rejoin()
 		return false
 	end
 
-	self.state.midHeist = false
-
 	if self.stats then
 		local startCash = self.state.robberyStartCash
+		local targetValue = self.state.cashWatch
+			and self.shared.parseCash(self.state.cashWatch.target)
+			or nil
+
 		self.stats:updateCash()
 		local cash = self.stats:getCash()
-		local maxCash = cash
-		local lastChangeAt = os.clock()
-		local deadline = os.clock() + 6
-
-		-- The cash HUD can update in several chunks after the collect
-		-- teleport. Wait for it to settle so the payout is not undercounted.
-		while os.clock() < deadline do
-			task.wait(0.2)
-			self.stats:updateCash()
-			cash = self.stats:getCash()
-			if cash and (not maxCash or cash > maxCash) then
-				maxCash = cash
-				lastChangeAt = os.clock()
-			end
-			if maxCash and startCash and maxCash > startCash
-				and (os.clock() - lastChangeAt) >= 1.2 then
-				break
-			end
-		end
-
 		local earned = 0
-		if startCash and startCash > 0 and maxCash and maxCash >= startCash then
-			earned = maxCash - startCash
+		if bagValue and bagValue > 0 then
+			earned = bagValue
+		elseif startCash and cash and cash > startCash then
+			earned = cash - startCash
+		elseif targetValue and targetValue > 0 then
+			earned = targetValue
 		end
-		local duration = self.state.robberyStartedAt and (os.clock() - self.state.robberyStartedAt) or 0
+
+		local duration = self.state.robberyStartedAt
+			and (os.clock() - self.state.robberyStartedAt)
+			or 0
 		self.stats:recordRobbery(robberyName, earned, duration)
 	end
 
 	self.state.currentRobbery = nil
 	self.state.robberyStartedAt = nil
 	self.state.robberyStartCash = nil
+	self.state.cashWatch = nil
+	self.state.lastBagValue = nil
 	return true
 end
 

@@ -66,18 +66,18 @@ half the doubled target, so each robbery also defines a `baseTarget`:
 | Jewelry | `$10000` | `$5000` |
 
 When the bag reaches its `baseTarget` and stops growing, the script collects
-it after `baseCapTimeout` (4s). If 2x is active, the bag keeps filling past
+it after `baseCapTimeout` (2s). If 2x is active, the bag keeps filling past
 the base cap toward the full doubled target, so nothing is collected early.
 
 Three timers keep depleted servers from wasting a full farm cycle:
 
-- `bagAppearTimeout` (20s): if no bag appears, the robbery is still on the
+- `bagAppearTimeout` (12s): if no bag appears, the robbery is still on the
   server's loot cooldown, so it is skipped and the next robbery starts.
-- `bagStaleTimeout` (12s): if a visible bag stops growing below the base cap
+- `bagStaleTimeout` (6s): if a visible bag stops growing below the base cap
   (another player already took part of the round), the script collects the
   capped amount instead of waiting for `maxFarmSeconds` (120s). Jewelry uses
-  its own flat-bag exit inside the box farm.
-- `baseCapTimeout` (4s): a bag that reached its base cap is collected quickly
+  the same setting for its flat-bag exit inside the box farm.
+- `baseCapTimeout` (2s): a bag that reached its base cap is collected quickly
   instead of waiting for the full stale timeout.
 
 Skips and capped collections are recorded in the event log, for example
@@ -94,16 +94,17 @@ script sweeps the ten `$500` cash pickups under
 `Event` RemoteEvent.
 
 The server only accepts a pickup when the player is close to it, so the sweep
-teleports onto the nearest available pickup, waits `miniHeists.preFireDelay`
-(0.25s) for the new position to replicate, and fires the event with the pickup
-part. It then polls the model for the `Nope` child the server adds when a pickup
-is claimed (`Cash.Nope.Cash.Event`). As soon as `Nope` appears the pickup counts
-as collected and the sweep instantly heads for the next closest one — there is
-no fixed post-fire delay. If the server does not mark the pickup within
-`miniHeists.confirmTimeout` (0.4s), the sweep re-teleports and retries up to
-`miniHeists.fireAttempts` (2) times before moving on. The pickup list is
-re-scanned every step, so the sweep always targets the closest pickup that is
-still available, including one that respawned mid-sweep.
+teleports onto the nearest available pickup, waits one live round trip
+(`core:getBaseWait()`) for the new position to replicate, and fires the event
+with the pickup part. It then polls the model for the `Nope` child the server
+adds when a pickup is claimed (`Cash.Nope.Cash.Event`). As soon as `Nope`
+appears the pickup counts as collected and the sweep instantly heads for the
+next closest one — there is no fixed post-fire delay. If the server does not
+mark the pickup within `miniHeists.confirmTimeout` (0.35s), the sweep
+re-teleports and retries up to `miniHeists.fireAttempts` (2) times before
+moving on. The pickup list is re-scanned every step, so the sweep always
+targets the closest pickup that is still available, including one that
+respawned mid-sweep.
 
 Pickups respawn after roughly 20-60 seconds, so each sweep takes whatever is
 available at that boundary without delaying the robbery cycle. A sweep also
@@ -128,13 +129,29 @@ never blocked:
   temporary vent-trigger CFrame is not overwritten.
 - `Core:stop` releases the lock along with the noclip listeners.
 
+## Ping-based waits
+
+The collect step no longer sleeps a fixed 1.5s at the criminal base.
+`Core:getPing()` reads `Player:GetNetworkPing()` (falling back to the `Stats`
+service's `Data Ping`) and `Core:getBaseWait()` waits one round trip plus a
+50ms buffer, clamped to 0.1-0.75s. The server pays out when it registers the
+player at the base, so the next robbery starts as soon as that round trip
+finishes. Per-robbery stats use the bag amount captured before the collect
+teleport, so nothing waits for the total cash HUD to settle.
+
+The same live wait is used before each mini-heist fire, and the Jewelry vent
+now exits as soon as the character actually moves instead of sleeping the full
+`timing.ventWait` (1.5s cap). Other checks were tightened as well: the cash
+target polls every 50ms, guards every 50ms, Casino levers refire every 0.5s,
+and Jewelry volleys every 0.1s.
+
 ## Jewelry box farm
 
 Jewelry no longer tweens to one box, waits for its health to drop, and then
 tweens to the next. The character follows a continuous nearest-neighbour tour
 of the live boxes while every live box is fired once per volley:
 
-- `movement.jewelryVolleyInterval` (0.15s) — time between all-box volleys.
+- `movement.jewelryVolleyInterval` (0.1s) — time between all-box volleys.
 - `movement.jewelrySpeed` (50) — normal travel speed between boxes.
 - `movement.jewelryMinSpeed` (12) — minimum approach speed near a box.
 - `movement.jewelrySlowRadius` (8) — distance at which movement starts slowing.
@@ -313,7 +330,9 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | `core:travel(destination, isLocked, label)` | respawn via Prisoners if needed, noclip teleport |
 | `core:enforcePosition(cframe, duration)` | re-apply a teleport target on `RunService.Stepped` |
 | `core:releasePosition()` | clear the active teleport lock |
-| `core:collect(label)` | teleport to the cash spot and collect |
+| `core:collect(label)` | teleport to the criminal base, wait one live ping, record the payout |
+| `core:getPing()` | live round-trip time in seconds (Player API, Stats fallback) |
+| `core:getBaseWait()` | ping plus a 50ms buffer, clamped to 0.1-0.75s |
 | `core:waitForCash(target, isLocked, label)` | generic wait-until-cash flow |
 | `core:waitForSolo(isLocked, label)` | idle while other players are present |
 | `core:guard(isLocked)` | solo, alive, and heist-open check |

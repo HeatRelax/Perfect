@@ -67,12 +67,12 @@ local function farm(core, isLocked)
 	core:setStep("Robbing Casino (" .. Casino.targetCash .. ", base " .. Casino.baseTarget .. ")")
 
 	local events = collectLeverEvents(core)
-	local deadline = os.clock() + 10
+	local deadline = os.clock() + 3
 	while #events < 4 and os.clock() < deadline do
 		if not core:guard(isLocked) then
 			return false
 		end
-		task.wait(0.25)
+		task.wait(0.1)
 		events = collectLeverEvents(core)
 	end
 
@@ -89,7 +89,7 @@ local function farm(core, isLocked)
 	local lastBagChangeAt = os.clock()
 	local staleLimit = core.settings.timing.bagStaleTimeout
 	local baseTarget = core.shared.parseCash(Casino.baseTarget)
-	local baseCapTimeout = core.settings.timing.baseCapTimeout or 4
+	local baseCapTimeout = core.settings.timing.baseCapTimeout or 2
 	local noclipConnection = core:startNoclip(isLocked)
 	core.state.midHeist = true
 
@@ -136,6 +136,7 @@ local function farm(core, isLocked)
 		if bagValue and bagValue ~= lastBagValue then
 			lastBagValue = bagValue
 			lastBagChangeAt = os.clock()
+			core.state.lastBagValue = bagValue
 		end
 
 		-- 2x can be disabled, capping the round at half the doubled target.
@@ -174,7 +175,7 @@ local function farm(core, isLocked)
 			break
 		end
 
-		task.wait(0.2)
+		task.wait(0.05)
 	end
 
 	core.state.midHeist = false

@@ -10,6 +10,7 @@ local virtualUser = game:GetService("VirtualUser")
 local lighting = game:GetService("Lighting")
 local starterGui = game:GetService("StarterGui")
 local httpService = game:GetService("HttpService")
+local statsService = game:GetService("Stats")
 
 local Shared = {}
 
@@ -26,6 +27,7 @@ Shared.services = {
 	lighting = lighting,
 	starterGui = starterGui,
 	httpService = httpService,
+	statsService = statsService,
 }
 
 Shared.settings = {
@@ -50,7 +52,7 @@ Shared.settings = {
 		jewelrySpeed = 50,
 		jewelryMinSpeed = 12,
 		jewelrySlowRadius = 8,
-		jewelryVolleyInterval = 0.15,
+		jewelryVolleyInterval = 0.1,
 
 		-- Jewelry farms a few studs below the store floor. A transparent,
 		-- client-only slab under the boxes stops gravity from pulling the
@@ -63,29 +65,36 @@ Shared.settings = {
 	miniHeists = {
 		enabled = true,
 
-		-- The server checks the player's replicated position, so give each
-		-- teleport a moment before firing. A pickup is confirmed collected as
-		-- soon as its model grows the "Nope" child; polling stops right there
-		-- and the sweep moves to the next nearest pickup with no post delay.
-		preFireDelay = 0.25,
-		confirmTimeout = 0.4,
+		-- The server checks the player's replicated position, so each teleport
+		-- waits for the live ping before firing (preFireDelay is omitted on
+		-- purpose). A pickup is confirmed collected as soon as its model grows
+		-- the "Nope" child; polling stops right there and the sweep moves to
+		-- the next nearest pickup with no post delay.
+		confirmTimeout = 0.35,
 		pollInterval = 0.02,
 		fireAttempts = 2,
 		tpHeight = 3,
 	},
 
 	timing = {
-		ventWait = 4,
-		collectWait = 1.5,
-		leverRefire = 1.5,
-		bagAppearTimeout = 20,
-		bagStaleTimeout = 12,
-		baseCapTimeout = 4,
+		-- All of these are upper bounds. The base and vent waits exit as soon
+		-- as the server has registered the position instead of sleeping the
+		-- full timeout.
+		ventWait = 1.5,
+		leverRefire = 0.5,
+		bagAppearTimeout = 12,
+		bagStaleTimeout = 6,
+		baseCapTimeout = 2,
 		maxFarmSeconds = 120,
+
+		-- Base wait = live ping + buffer, clamped to these bounds.
+		baseWaitBuffer = 0.05,
+		baseWaitMin = 0.1,
+		baseWaitMax = 0.75,
 	},
 
 	idle = {
-		checkInterval = 0.25,
+		checkInterval = 0.1,
 		snapDistance = 5,
 		antiAfkInterval = 60,
 	},

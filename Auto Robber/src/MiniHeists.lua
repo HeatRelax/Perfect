@@ -136,8 +136,8 @@ function MiniHeists.run(core)
 		cashBefore = stats:getCash()
 	end
 
-	local preFireDelay = settings.preFireDelay or 0.25
-	local confirmTimeout = settings.confirmTimeout or 0.4
+	local preFireDelay = settings.preFireDelay or core:getBaseWait()
+	local confirmTimeout = settings.confirmTimeout or math.max(core:getBaseWait(), 0.25)
 	local pollInterval = settings.pollInterval or 0.02
 	local tpHeight = settings.tpHeight or 3
 	local fireAttempts = settings.fireAttempts or 2

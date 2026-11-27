@@ -235,18 +235,49 @@ local function enterVent(core, isLocked)
 		end
 
 		root.CFrame = previousCFrame
-		return true
+		return true, previousCFrame.Position
 	end
 
 	if prompt then
+		local before = root and root.Position
 		prompt.HoldDuration = 0
 		if typeof(fireproximityprompt) == "function" then
 			pcall(fireproximityprompt, prompt)
 		end
-		return true
+		return true, before
 	end
 
 	return false
+end
+
+-- The vent teleport is server-driven. Wait for the character to actually
+-- move instead of always sleeping the full vent timeout.
+local function waitForVentTeleport(core, isLocked, fromPosition, timeout)
+	core:setStep("Waiting at Jewelry vent...")
+
+	if not fromPosition then
+		return core:waitGuarded(math.min(timeout or 1, 0.5), isLocked)
+	end
+
+	local deadline = os.clock() + (timeout or 1)
+	while os.clock() < deadline do
+		if not core:guard(isLocked) then
+			return false
+		end
+		local root = core:getRoot()
+		if root then
+			-- Compare horizontal movement only: startFarmGuard has already
+			-- snapped the character vertically, so a Y delta is not proof
+			-- that the server vent teleport happened.
+			local dx = root.Position.X - fromPosition.X
+			local dz = root.Position.Z - fromPosition.Z
+			if dx * dx + dz * dz > 25 then
+				return true
+			end
+		end
+		task.wait(0.05)
+	end
+	return true
 end
 
 local function farm(core, isLocked, existingPlatform)
@@ -277,16 +308,16 @@ local function farm(core, isLocked, existingPlatform)
 
 	local lastBagValue
 	local lastBagChangeAt = os.clock()
-	local staleLimit = 10
+	local staleLimit = core.settings.timing.bagStaleTimeout or 6
 	local baseTarget = core.shared.parseCash(Jewelry.baseTarget)
-	local baseCapTimeout = core.settings.timing.baseCapTimeout or 4
+	local baseCapTimeout = core.settings.timing.baseCapTimeout or 2
 	local heartbeat = core.services.runService.Heartbeat
 
 	local tour = {}
 	local tourIndex = 1
 	local nextVolleyAt = 0
 	local nextBagCheck = 0
-	local volleyInterval = movement.jewelryVolleyInterval or 0.15
+	local volleyInterval = movement.jewelryVolleyInterval or 0.1
 	local firesPerBox = math.max(1, math.floor(movement.firesPerBox or 1))
 	local speed = movement.jewelrySpeed or 50
 	local minSpeed = movement.jewelryMinSpeed or 12
@@ -354,12 +385,13 @@ local function farm(core, isLocked, existingPlatform)
 		-- Read the bag a few times per second. If the round has already paid
 		-- out everything it can, the amount stays flat even while boxes break.
 		if os.clock() >= nextBagCheck then
-			nextBagCheck = os.clock() + 0.2
+			nextBagCheck = os.clock() + 0.1
 			local cashLabel = core.shared.getCashLabel()
 			local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
 			if bagValue and bagValue ~= lastBagValue then
 				lastBagValue = bagValue
 				lastBagChangeAt = os.clock()
+				core.state.lastBagValue = bagValue
 				if debug then
 					print("[JEWDBG] bag", bagValue, "at", string.format("%.1f", elapsed))
 				end
@@ -373,7 +405,12 @@ local function farm(core, isLocked, existingPlatform)
 			if debug then
 				print("[JEWDBG] no live boxes at", string.format("%.1f", elapsed))
 			end
-			task.wait(1.2)
+			local cashLabel = core.shared.getCashLabel()
+			local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
+			if bagValue then
+				core.state.lastBagValue = bagValue
+			end
+			task.wait(0.4)
 			break
 		end
 
@@ -553,7 +590,8 @@ function Jewelry.run(core)
 	end
 
 	core:setNoclip(true)
-	if not enterVent(core, isLocked) then
+	local entered, ventPosition = enterVent(core, isLocked)
+	if not entered then
 		cleanup()
 		core.state.midHeist = false
 		return false
@@ -562,7 +600,7 @@ function Jewelry.run(core)
 	core:setNoclip(false)
 	fallGuard = startFarmGuard(core, farmRootY)
 
-	if not core:waitGuarded(timing.ventWait, isLocked, "Waiting at Jewelry vent...") then
+	if not waitForVentTeleport(core, isLocked, ventPosition, timing.ventWait) then
 		cleanup()
 		core.state.midHeist = false
 		return false
