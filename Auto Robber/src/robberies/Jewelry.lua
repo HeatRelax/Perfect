@@ -434,7 +434,8 @@ local function farm(core, isLocked, existingPlatform)
 		if os.clock() >= nextBagCheck then
 			nextBagCheck = os.clock() + 0.1
 			local cashLabel = core.shared.getCashLabel()
-			local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
+			local bagValue = core:isBagFresh() and cashLabel
+				and core.shared.parseCash(cashLabel.Text) or nil
 			if bagValue and bagValue ~= lastBagValue then
 				lastBagValue = bagValue
 				lastBagChangeAt = os.clock()
@@ -453,7 +454,8 @@ local function farm(core, isLocked, existingPlatform)
 				print("[JEWDBG] no live boxes at", string.format("%.1f", elapsed))
 			end
 			local cashLabel = core.shared.getCashLabel()
-			local bagValue = cashLabel and core.shared.parseCash(cashLabel.Text)
+			local bagValue = core:isBagFresh() and cashLabel
+				and core.shared.parseCash(cashLabel.Text) or nil
 			if bagValue then
 				core.state.lastBagValue = bagValue
 			end

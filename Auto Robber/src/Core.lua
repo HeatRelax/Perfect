@@ -211,7 +211,23 @@ function Core:setStep(text)
 	if robberyName and self.state.currentRobbery ~= robberyName then
 		self.state.currentRobbery = robberyName
 		self.state.robberyStartedAt = os.clock()
-		self.state.cashWatch = targetText and { target = targetText, armed = false } or nil
+
+		-- The previous heist's bag can still be visible for a moment after
+		-- the instant collect teleport. Snapshot it so the new robbery can
+		-- tell a stale bag from its own fresh one.
+		local statsHud = self.shared.getStatsHud()
+		local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
+		local bagVisible = cashBagHud and cashBagHud.Visible or false
+		local startLabel = self.shared.getCashLabel()
+		local startValue = bagVisible and startLabel
+			and self.shared.parseCash(startLabel.Text) or nil
+
+		self.state.cashWatch = targetText and {
+			target = targetText,
+			armed = false,
+			startValue = startValue,
+			sawHidden = not bagVisible,
+		} or nil
 		self.state.lastBagValue = nil
 
 		if self.stats then
@@ -234,13 +250,11 @@ function Core:hasOtherPlayers()
 end
 
 function Core:hasCash(targetText)
-	local reached = self.shared.hasCash(targetText)
 	local watch = self.state.cashWatch
 
-	if not watch or watch.target ~= targetText then
-		return reached
-	end
-
+	-- Read the bag once and use that same snapshot for both the target check
+	-- and the arming check. Two separate reads could see the HUD mid-reset and
+	-- combine an old "reached" amount with a new low amount.
 	local statsHud = self.shared.getStatsHud()
 	local cashBagHud = statsHud and statsHud:FindFirstChild("CashBagHUD")
 	local bagCash = cashBagHud and cashBagHud:FindFirstChild("Cash")
@@ -248,15 +262,30 @@ function Core:hasCash(targetText)
 	local label = self.shared.getCashLabel()
 	local value = label and self.shared.parseCash(label.Text)
 	local target = self.shared.parseCash(targetText)
+	local visible = cashBagHud and cashBagHud.Visible or false
 	local successText = stolenLabel and stolenLabel:IsA("TextLabel")
 		and string.lower(stolenLabel.Text) or ""
 	local gameSaysSuccess = string.find(successText, "success", 1, true) ~= nil
 
+	if not watch or watch.target ~= targetText then
+		return visible and value and target and value >= target
+	end
+
+	if not visible then
+		watch.sawHidden = true
+	end
+
 	if not watch.armed then
-		-- Only arm after the bag has been seen visible and below this
-		-- robbery's target. A stale bag from the previous heist can stay at
-		-- its old target for a moment, so hiding alone is not enough.
-		if cashBagHud and cashBagHud.Visible and value and target and value < target then
+		-- A bag only belongs to this robbery once the previous heist's HUD
+		-- has gone away, dropped below the old value, or was already empty
+		-- when this robbery started. This is what stops a stale bag from
+		-- completing the next robbery.
+		local fresh = watch.sawHidden
+			or watch.startValue == nil
+			or watch.startValue <= 0
+			or (value and value < watch.startValue)
+		if fresh and visible and value and target and value < target
+			and not gameSaysSuccess then
 			watch.armed = true
 		end
 	end
@@ -272,7 +301,13 @@ function Core:hasCash(targetText)
 		return true
 	end
 
-	return reached and watch.armed
+	return watch.armed and visible and value and target and value >= target
+end
+
+-- True once the cash bag has been confirmed as this robbery's own bag.
+function Core:isBagFresh()
+	local watch = self.state.cashWatch
+	return watch ~= nil and watch.armed == true
 end
 
 -- Live round-trip time in seconds. Used to size the short waits that only
@@ -1517,7 +1552,8 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
 			and string.lower(stolenLabel.Text) or ""
 		local isSuccess = string.find(successText, "success", 1, true) ~= nil
-		if cashBagHud and cashBagHud.Visible and not isSuccess then
+		local bagFresh = self:isBagFresh()
+		if bagFresh and cashBagHud and cashBagHud.Visible and not isSuccess then
 			bagSeenAt = bagSeenAt or os.clock()
 		end
 
@@ -1531,7 +1567,8 @@ function Core:runCashLoop(targetText, isLocked, name, baseTargetText)
 
 		-- Another player can empty part of a round, leaving this bag capped
 		-- below the doubled target. Collect once the amount stops growing.
-		local bagValue = cashBagHud and cashBagHud.Visible and label
+		local bagValue = bagFresh and cashBagHud and cashBagHud.Visible
+			and not isSuccess and label
 			and self.shared.parseCash(label.Text) or nil
 		if bagValue and bagValue ~= lastBagValue then
 			lastBagValue = bagValue
@@ -1633,14 +1670,17 @@ function Core:collect(label)
 		robberyName = label:match("Collecting (%a+) cash")
 	end
 
-	-- Read the bag before the collect teleport hides/resets the HUD. This is
-	-- the exact reward for this robbery, so stats no longer need to poll the
-	-- total cash HUD for several seconds afterwards.
+	-- Read the bag before the collect teleport hides/resets the HUD. Only a
+	-- bag confirmed as this robbery's own bag counts; a stale bag from the
+	-- previous heist must not be recorded as this robbery's payout.
+	local bagFresh = self:isBagFresh()
 	local bagValue = self.state.lastBagValue
-	local bagLabel = self.shared.getCashLabel()
-	local currentBag = bagLabel and self.shared.parseCash(bagLabel.Text)
-	if currentBag and (not bagValue or currentBag > bagValue) then
-		bagValue = currentBag
+	if bagFresh then
+		local bagLabel = self.shared.getCashLabel()
+		local currentBag = bagLabel and self.shared.parseCash(bagLabel.Text)
+		if currentBag and (not bagValue or currentBag > bagValue) then
+			bagValue = currentBag
+		end
 	end
 
 	if not self:pivot(self.settings.finalCFrame, nil, label) then
@@ -1660,7 +1700,7 @@ function Core:collect(label)
 		return false
 	end
 
-	if self.stats then
+	if self.stats and bagFresh then
 		local startCash = self.state.robberyStartCash
 		local targetValue = self.state.cashWatch
 			and self.shared.parseCash(self.state.cashWatch.target)

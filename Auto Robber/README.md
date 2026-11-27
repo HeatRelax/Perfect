@@ -47,8 +47,13 @@ All robbery cash targets are doubled for the global VIP 2x cash bonus:
 | Club | `$12000` |
 | Jewelry | `$10000` |
 
-A robbery only counts after its bag has been seen visible and below the new
-target, so a stale bag from the previous heist cannot skip the next one. When
+A robbery only counts after its bag has been confirmed as its own. When a
+robbery starts, the script snapshots the visible bag (`startValue`). The bag
+must then hide, drop below that snapshot, or have been empty/unreadable at the
+start before it can arm; only an armed bag can satisfy the cash target, feed
+the base-cap timers, or be recorded in the stats. This is what stops the
+previous heist's still-visible bag from instantly completing the next robbery
+(Casino and Bank were being logged as `+$12,000 (0s)` before the guard). When
 a bag runs out of loot before the doubled target (Jewelry caps at whatever the
 round's boxes hold, often `$5,000`), the game switches the bag label from
 `Cash Reward` to `Robbery Success!`; the script accepts that signal and
@@ -341,7 +346,8 @@ Then add `"Example"` to `Shared.settings.robberyOrder`.
 | `core:guardLock(isLocked)` | heist-open check only |
 | `core:tweenTo(position, speed, isLocked)` | smooth movement |
 | `core:startNoclip(isLocked)` / `core:stopNoclip(conn)` | noclip pump |
-| `core:hasCash(target)` | reads the cash bag HUD (`CashBagHUD.Cash.Amount`) |
+| `core:hasCash(target)` | reads the cash bag HUD (`CashBagHUD.Cash.Amount`) and only accepts this robbery's fresh bag |
+| `core:isBagFresh()` | true once the bag has been confirmed as the current robbery's own bag |
 | `core:lockChecker(name, lockWhenMissing)` | builds a heist lock checker |
 | `core:setStep(label)` | updates the overlay status |
 | `core:rejoin()` | rejoin with the Infinite Yield method |

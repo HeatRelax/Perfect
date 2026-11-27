@@ -116,7 +116,8 @@ local function farm(core, isLocked)
 		local successText = stolenLabel and stolenLabel:IsA("TextLabel")
 			and string.lower(stolenLabel.Text) or ""
 		local isSuccess = string.find(successText, "success", 1, true) ~= nil
-		if cashBagHud and cashBagHud.Visible and not isSuccess then
+		local bagFresh = core:isBagFresh()
+		if bagFresh and cashBagHud and cashBagHud.Visible and not isSuccess then
 			bagSeenAt = bagSeenAt or os.clock()
 		end
 
@@ -131,7 +132,8 @@ local function farm(core, isLocked)
 		-- Another player can empty part of a round, leaving this bag capped
 		-- below the doubled target. Collect once the amount stops growing.
 		local label = core.shared.getCashLabel()
-		local bagValue = cashBagHud and cashBagHud.Visible and not isSuccess and label
+		local bagValue = bagFresh and cashBagHud and cashBagHud.Visible
+			and not isSuccess and label
 			and core.shared.parseCash(label.Text) or nil
 		if bagValue and bagValue ~= lastBagValue then
 			lastBagValue = bagValue
