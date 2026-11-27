@@ -367,6 +367,7 @@ local function farm(core, isLocked, existingPlatform)
 	local tourIndex = 1
 	local nextVolleyAt = 0
 	local nextBagCheck = 0
+	local restockNotified = false
 	local volleyInterval = movement.jewelryVolleyInterval or 0.1
 	local firesPerBox = math.max(1, math.floor(movement.firesPerBox or 1))
 	local speed = movement.jewelrySpeed or 50
@@ -454,6 +455,12 @@ local function farm(core, isLocked, existingPlatform)
 		if #boxes == 0 then
 			-- Every box is broken. The store restocks them quickly, so keep
 			-- the farm alive and rescan instead of collecting a partial bag.
+			if not restockNotified then
+				restockNotified = true
+				if core.stats then
+					core.stats:recordEvent("Jewelry: boxes empty, waiting for restock")
+				end
+			end
 			if debug then
 				print("[JEWDBG] waiting for restock at", string.format("%.1f", elapsed))
 			end
@@ -477,6 +484,13 @@ local function farm(core, isLocked, existingPlatform)
 
 			task.wait(0.1)
 			continue
+		end
+
+		if restockNotified then
+			restockNotified = false
+			if core.stats then
+				core.stats:recordEvent("Jewelry: boxes restocked, resuming")
+			end
 		end
 
 		-- Defensive: recreate the platform if the game ever removes it.

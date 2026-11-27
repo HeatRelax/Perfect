@@ -61,7 +61,8 @@ Jewelry keeps farming through empty periods: when every box is broken, the
 script waits at the farm height and rescans until the store restocks, then
 continues firing. It only collects once the bag reaches the full target (or
 the Jewelry farm cap is hit), so the `Robbery Success!` label no longer ends a
-round early.
+round early. The event log reports `Jewelry: boxes empty, waiting for restock`
+and `Jewelry: boxes restocked, resuming` when that happens.
 
 The doubled targets stay in place so the script immediately takes advantage
 of the 2x bonus if the game re-enables it. While 2x is off, every round caps at
