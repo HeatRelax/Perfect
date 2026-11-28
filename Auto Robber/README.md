@@ -247,22 +247,21 @@ kicked or loses its connection, it:
 - shows `Connection lost - rejoining...`, `Kicked - rejoining...`, or a similar
   message in the stats HUD;
 - logs the full error code and message to the executor console;
-- rejoins the exact server it was in. It never calls `Teleport(placeId)`, which
-  would pick a random public server. On a private server it uses the
-  private-server access code (`game.PrivateServerId`), so the rejoin still works
-  if the job instance changed; otherwise it targets the current `game.JobId`;
-- retries forever. A failed teleport is retried every
-  `settings.rejoin.retryDelay` (2s), and a teleport that has not left the server
-  after `settings.rejoin.teleportTimeout` (10s) is retried too.
+- rejoins immediately with the same method Infinite Yield uses: `Kick` +
+  `Teleport` when alone in the server, otherwise `TeleportToPlaceInstance` for
+  the current job;
+- retries up to four times with a short delay between attempts.
 
-The rejoin path is intentionally fast: the first attempt is immediate. There is
-no `rejoin manually` state and no fallback to a public server.
+The rejoin path is intentionally fast: there is no pre-teleport delay and no
+long retry sleep. If the teleport cannot start, the HUD shows `Rejoin failed -
+rejoin manually`.
 
 The watcher listens to both `GuiService.ErrorMessageChanged` and the
 `RobloxPromptGui.promptOverlay` error prompt, so it still works if one signal is
-missed. Permanent disconnect codes (moderation, security checks, a wrong client
-version, private-server kick) are logged but still retried, so an unattended
-client never stops on a rejoin prompt.
+missed. `GuiService:GetErrorCode()` is used to ignore errors that a rejoin cannot
+fix, such as moderation, security checks, a wrong client version, or a private
+server kick. It also ignores `DisconnectClientRequest`, which is what an
+intentional leave looks like.
 
 The Auto Robber's own `core:rejoin()` flow sets an internal `rejoining` /
 `teleporting` guard before it teleports, so the watcher never treats its own
@@ -270,9 +269,10 @@ rejoin as an accidental disconnect.
 
 Limitations: this runs inside the Roblox client. If the client process crashes,
 hangs, or is closed, Lua stops running and nothing can rejoin. If the internet is
-completely down, the teleport calls keep failing and are retried until it
-returns. A Roblox-wide outage or a moderation ban cannot be bypassed by
-rejoining.
+completely down, the teleport calls will keep failing until it returns; the
+script gives up after four attempts and leaves `Reconnect failed - rejoin
+manually` in the HUD. A Roblox-wide outage or a moderation ban cannot be bypassed
+by rejoining.
 
 ## Performance boost
 
