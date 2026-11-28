@@ -117,11 +117,10 @@ Shared.settings = {
 		delay = 0,
 		queueHandler = false,
 
-		-- Automatic recovery from unintentional kicks / disconnects.
-		kickFirstDelay = 0,
-		kickRetryDelay = 0.5,
-		kickTeleportTimeout = 12,
-		kickMaxAttempts = 4,
+		-- Same-server rejoins retry forever. The first attempt is immediate;
+		-- these control the retry pacing after a failure or a stalled teleport.
+		retryDelay = 2,
+		teleportTimeout = 10,
 	},
 
 	stats = {

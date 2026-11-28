@@ -792,10 +792,15 @@ function Stats:recordReconnectAttempt(attempt, maxAttempts, target)
 	self.session.reconnectAttempts += 1
 	self.run.reconnectAttempts += 1
 	self.state.totalReconnectAttempts += 1
+	local label
+	if int(maxAttempts) > 0 then
+		label = string.format("%d/%d", int(attempt), int(maxAttempts))
+	else
+		label = tostring(int(attempt))
+	end
 	self:recordEvent(string.format(
-		"Reconnect %d/%d (%s)",
-		int(attempt),
-		int(maxAttempts),
+		"Reconnect %s (%s)",
+		label,
 		tostring(target or "?")
 	))
 end

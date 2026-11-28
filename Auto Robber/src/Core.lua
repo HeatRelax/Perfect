@@ -174,7 +174,9 @@ function Core.new(shared, performance, stats)
 		rejoining = false,
 		teleporting = false,
 		kickHandling = false,
-		kickAttempts = 0,
+		rejoinReason = nil,
+		rejoinAttempt = 0,
+		rejoinRetryScheduled = false,
 		switchingTeam = false,
 		hiding = false,
 		midHeist = false,
@@ -498,15 +500,72 @@ function Core:getTeleportData()
 	return self.settings.finalCFrame
 end
 
--- Infinite Yield style rejoin: kick + Teleport when alone, otherwise rejoin
--- the exact same job. Fast, with no extra retry delays.
+-- Rejoin the exact server the player is currently in. Teleport(placeId)
+-- picks a random public server, so it is never used. A private server is
+-- rejoined by its access code (which survives a job instance change);
+-- otherwise the current JobId is used.
+function Core:teleportBackToServer()
+	local player = self.shared.getPlayer()
+	local teleportService = self.services.teleportService
+	local teleportData = self:getTeleportData()
+
+	if not player then
+		return false, "local player missing"
+	end
+
+	local privateServerId = game.PrivateServerId
+	local privateErr
+	if privateServerId and privateServerId ~= "" then
+		local ok, err = pcall(function()
+			teleportService:TeleportToPrivateServer(
+				game.PlaceId,
+				privateServerId,
+				{ player },
+				nil,
+				teleportData
+			)
+		end)
+		if ok then
+			return true
+		end
+		privateErr = tostring(err)
+	end
+
+	local jobId = game.JobId
+	if not jobId or jobId == "" then
+		return false, "job id missing"
+	end
+
+	local ok, err = pcall(function()
+		teleportService:TeleportToPlaceInstance(
+			game.PlaceId,
+			jobId,
+			player,
+			nil,
+			teleportData
+		)
+	end)
+	if ok then
+		return true
+	end
+
+	local reason = tostring(err)
+	if privateErr then
+		reason = reason .. " / private: " .. privateErr
+	end
+	return false, reason
+end
+
+-- Rejoin forever: the first attempt is immediate and failures are retried
+-- after settings.rejoin.retryDelay. There is no manual-rejoin fallback.
 function Core:rejoin(reason)
 	if self.state.rejoining then
 		return
 	end
 	self.state.rejoining = true
+	self.state.rejoinReason = reason or "flow"
 	if self.stats then
-		self.stats:recordRejoin(reason or "flow")
+		self.stats:recordRejoin(self.state.rejoinReason)
 	end
 	self:setStep("Rejoining server...")
 
@@ -538,59 +597,63 @@ function Core:rejoin(reason)
 		self.stats:flush()
 	end
 
-	-- Suppress the disconnect watcher for this intentional rejoin.
+	self:startRejoinAttempt()
+end
+
+-- One same-server teleport attempt. The timeout callback only runs when the
+-- script is still in the server, which means the teleport did not leave.
+function Core:startRejoinAttempt()
+	if self.stopped then
+		return
+	end
+
+	local rejoinSettings = self.settings.rejoin
+	local delay = rejoinSettings.retryDelay or 2
+	local timeout = rejoinSettings.teleportTimeout or 10
+
+	self.state.rejoinAttempt += 1
+	local attempt = self.state.rejoinAttempt
 	self.state.teleporting = true
 
-	local players = self.services.players
-	local player = self.shared.getPlayer()
-	local teleportService = self.services.teleportService
-	local teleportData = self:getTeleportData()
-	local ok, err
-
-	if #players:GetPlayers() <= 1 then
-		pcall(function()
-			player:Kick("\nRejoining...")
-		end)
-		task.wait(0.3)
-		ok, err = pcall(function()
-			teleportService:Teleport(game.PlaceId, player, teleportData)
-		end)
-	else
-		ok, err = pcall(function()
-			teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
-		end)
+	local ok, err = self:teleportBackToServer()
+	if self.stats then
+		self.stats:recordReconnectAttempt(attempt, 0, "same server")
+		self.stats:recordReconnectResult(ok, "same server")
 	end
 
 	if not ok then
-		warn("[Auto Robber] Rejoin teleport failed: " .. tostring(err))
-		self.state.rejoining = false
-		self.state.teleporting = false
-		self:setStep("Rejoin failed - rejoin manually")
+		warn(string.format(
+			"[Auto Robber] Rejoin attempt %d failed: %s",
+			attempt,
+			tostring(err)
+		))
+		self:setStep("Rejoining server... (retrying)")
+		self:scheduleRejoinAttempt(attempt, delay)
+		return
 	end
+
+	task.delay(timeout, function()
+		if self.stopped or self.state.rejoinAttempt ~= attempt then
+			return
+		end
+		warn("[Auto Robber] Rejoin teleport timed out; retrying")
+		self:setStep("Rejoining server... (retrying)")
+		self:scheduleRejoinAttempt(attempt, delay)
+	end)
 end
 
-function Core:teleportBackToServer()
-	local player = self.shared.getPlayer()
-	local teleportService = self.services.teleportService
-	local teleportData = self:getTeleportData()
-	local ok, err
-
-	if #self.services.players:GetPlayers() <= 1 then
-		ok, err = pcall(function()
-			teleportService:Teleport(game.PlaceId, player, teleportData)
-		end)
-	else
-		ok, err = pcall(function()
-			teleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player, nil, teleportData)
-		end)
+function Core:scheduleRejoinAttempt(attempt, delay)
+	if self.state.rejoinRetryScheduled then
+		return
 	end
-
-	if ok then
-		return true
-	end
-
-	warn("[Auto Robber] Reconnect teleport failed: " .. tostring(err))
-	return false
+	self.state.rejoinRetryScheduled = true
+	task.delay(delay, function()
+		self.state.rejoinRetryScheduled = false
+		if self.stopped or self.state.rejoinAttempt ~= attempt then
+			return
+		end
+		self:startRejoinAttempt()
+	end)
 end
 
 function Core:handleDisconnect(reason, code)
@@ -600,13 +663,7 @@ function Core:handleDisconnect(reason, code)
 	if self.state.kickHandling then
 		return
 	end
-
-	local rejoinSettings = self.settings.rejoin
-	local maxAttempts = rejoinSettings.kickMaxAttempts or 4
-	if self.state.kickAttempts >= maxAttempts then
-		self:setStep("Reconnect failed - rejoin manually")
-		return
-	end
+	self.state.kickHandling = true
 
 	local codeName = formatErrorName(code)
 	local message = tostring(reason or ""):gsub("%s+", " "):sub(1, 200)
@@ -614,7 +671,6 @@ function Core:handleDisconnect(reason, code)
 		message = codeName
 	end
 
-	self.state.kickHandling = true
 	self:setStep(describeDisconnect(code) .. " - rejoining...")
 	warn(string.format("[Auto Robber] Disconnect detected (%s): %s", codeName, message))
 
@@ -623,95 +679,9 @@ function Core:handleDisconnect(reason, code)
 		self.stats:flush()
 	end
 
-	task.spawn(function()
-		local delay = rejoinSettings.kickFirstDelay or 1
-		local stop = false
-
-		while self.state.kickAttempts < maxAttempts and not stop do
-			if self.state.rejoining then
-				break
-			end
-
-			task.wait(delay)
-			if self.state.rejoining then
-				break
-			end
-
-			if self.state.teleporting then
-				task.wait(1)
-				continue
-			end
-
-			self.state.kickAttempts += 1
-			local attempt = self.state.kickAttempts
-			local target = "rejoin"
-			self:setStep(string.format(
-				"%s - rejoining (%d/%d)...",
-				describeDisconnect(code),
-				attempt,
-				maxAttempts
-			))
-			warn(string.format(
-				"[Auto Robber] Reconnect attempt %d/%d (%s)",
-				attempt,
-				maxAttempts,
-				target
-			))
-
-			if self.stats then
-				self.stats:recordReconnectAttempt(attempt, maxAttempts, target)
-			end
-
-			local teleportOk = self:teleportBackToServer()
-			if self.stats then
-				self.stats:recordReconnectResult(teleportOk, target)
-			end
-
-			if not teleportOk then
-				delay = rejoinSettings.kickRetryDelay or 4
-				continue
-			end
-
-			self.state.teleporting = true
-			local startedAt = os.clock()
-			local timeout = rejoinSettings.kickTeleportTimeout or 12
-
-			while os.clock() - startedAt < timeout do
-				if self.state.rejoining then
-					stop = true
-					break
-				end
-				if not self.state.teleporting then
-					break
-				end
-				task.wait(0.5)
-			end
-
-			if stop then
-				break
-			end
-
-			if self.state.teleporting then
-				local currentCode = getDisconnectCode(self.services.guiService)
-				if currentCode and currentCode ~= Enum.ConnectionError.OK then
-					-- The teleport did not take; clear it and try again.
-					self.state.teleporting = false
-				else
-					-- The error cleared, so the teleport is starting.
-					stop = true
-					break
-				end
-			end
-
-			delay = rejoinSettings.kickRetryDelay or 4
-		end
-
-		self.state.kickHandling = false
-		if not stop and not self.state.rejoining and not self.state.teleporting then
-			self:setStep("Reconnect failed - rejoin manually")
-			warn("[Auto Robber] Automatic reconnect gave up")
-		end
-	end)
+	-- The same same-server retry loop as every other rejoin. It never gives
+	-- up and never falls back to a random public server.
+	self:rejoin("disconnect: " .. codeName)
 end
 
 function Core:watchForDisconnects()
@@ -734,17 +704,13 @@ function Core:watchForDisconnects()
 
 		local code = getDisconnectCode(guiService)
 		if code and NO_REJOIN_ERRORS[code] then
-			self:setStep(describeDisconnect(code) .. " - rejoin manually")
+			-- Permanent codes are still retried: the script must never stop
+			-- and wait for a manual rejoin.
 			warn(string.format(
-				"[Auto Robber] Disconnect will not be auto-rejoined (%s): %s",
+				"[Auto Robber] Permanent disconnect code (%s); retrying anyway: %s",
 				formatErrorName(code),
 				tostring(message or "")
 			))
-			if self.stats then
-				self.stats:recordDisconnect(formatErrorName(code), message, false)
-				self.stats:flush()
-			end
-			return
 		end
 
 		self:handleDisconnect(message, code)
@@ -804,11 +770,9 @@ function Core:watchForDisconnects()
 			if self.state.rejoining then
 				warn("[Auto Robber] Rejoin teleport failed: " .. tostring(message))
 				if self.stats then
-					self.stats:recordEvent("Rejoin teleport failed; rejoin manually")
+					self.stats:recordEvent("Rejoin teleport failed; retrying")
 				end
-				self.state.rejoining = false
-				self.state.teleporting = false
-				self:setStep("Rejoin failed - rejoin manually")
+				-- Keep the rejoin state; the attempt watchdog retries.
 				return
 			end
 
