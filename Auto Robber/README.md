@@ -9,12 +9,12 @@ src/
   Core.lua                flow engine (travel, guards, idling, HUD, rejoin, disconnect recovery)
   Stats.lua               runtime stats and local persistence
   Performance.lua         automatic performance boost (3D rendering stays on)
-  MiniHeists.lua          fast sweep of the $500 map cash pickups
   robberies/
     Jewelry.lua
     Club.lua
     Casino.lua
     Bank.lua
+    MiniHeists.lua        fast sweep of the $500 map cash pickups
 ```
 
 ## HUD
@@ -320,7 +320,7 @@ If the repo or folder moves, update `baseUrl` at the top of `Main.lua`.
 - `src/Core.lua` — shared flow engine; normally does not need changing
 - `src/Stats.lua` — runtime stats and local persistence
 - `src/Performance.lua` — automatic performance boost (3D rendering stays on)
-- `src/MiniHeists.lua` — fast sweep of the map cash pickups after each robbery
+- `src/robberies/MiniHeists.lua` — fast sweep of the map cash pickups after each robbery
 - Robbery order lives in `Shared.settings.robberyOrder`
 
 ### Adding a robbery

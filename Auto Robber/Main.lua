@@ -118,7 +118,7 @@ for _, robberyName in ipairs(Shared.settings.robberyOrder) do
 	table.insert(robberies, loadModule("src/robberies/" .. robberyName, "run"))
 end
 
-local MiniHeists = loadModule("src/MiniHeists", "run")
+local MiniHeists = loadModule("src/robberies/MiniHeists", "run")
 
 local env
 if type(getgenv) == "function" then
