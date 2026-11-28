@@ -55,12 +55,10 @@ table.insert(baseUrls, "https://raw.githubusercontent.com/" .. repo .. "/refs/he
 table.insert(baseUrls, "https://raw.githubusercontent.com/" .. repo .. "/main/" .. repoPath)
 table.insert(baseUrls, "https://cdn.jsdelivr.net/gh/" .. repo .. "@main/" .. repoPath)
 
-local mainUrl
-if commitSha then
-	mainUrl = "https://raw.githubusercontent.com/" .. repo .. "/" .. commitSha .. "/" .. repoPath .. "Main.lua"
-else
-	mainUrl = "https://raw.githubusercontent.com/" .. repo .. "/refs/heads/main/" .. repoPath .. "Main.lua"
-end
+-- The rejoin reload always fetches the branch head. A stale cached SHA or a
+-- rate-limited API must not pin the next run to an old commit (that is how a
+-- moved module can suddenly go missing).
+local reloadUrl = "https://raw.githubusercontent.com/" .. repo .. "/refs/heads/main/" .. repoPath .. "Main.lua"
 
 local function fetchSource(path)
 	local lastError
@@ -167,7 +165,7 @@ end
 
 if type(queue_on_teleport) == "function" then
 	clearTeleportQueue()
-	local url = mainUrl .. "?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
+	local url = reloadUrl .. "?t=" .. os.time() .. "&r=" .. math.random(100000, 999999)
 	queue_on_teleport(("loadstring(game:HttpGet(%q))()"):format(url))
 end
 
